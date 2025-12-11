@@ -5,6 +5,7 @@
 
 from services.data_loader import load_network_from_csv, validate_network_data, print_network_summary
 from models.network import LogisticsNetwork
+from optimizers.coordinate import CoordinateOptimizer
 
 
 def main():
@@ -48,16 +49,47 @@ def main():
     # Виводимо детальний стан мережі
     network.print_network_state()
 
-    # Обчислюємо та виводимо витрати
-    network.print_costs()
+    # Обчислюємо та виводимо початкові витрати
+    print("\n" + "=" * 60)
+    print("ПОЧАТКОВІ ВИТРАТИ")
+    print("=" * 60)
+    initial_costs = network.calculate_costs()
+    network.cost_calculator.print_cost_breakdown(initial_costs)
+
+    # Запуск оптимізації МПО
+    print("\n\n" + "=" * 60)
+    print("ЗАПУСК ОПТИМІЗАЦІЇ")
+    print("=" * 60)
+
+    optimizer = CoordinateOptimizer(
+        network=network,
+        step_size=2.0,
+        max_iterations=50,
+        tolerance=0.1
+    )
+
+    # Виконуємо оптимізацію
+    results = optimizer.optimize(verbose=True)
+
+    # Виводимо оптимізовану мережу
+    print("\n" + "=" * 60)
+    print("СТАН МЕРЕЖІ ПІСЛЯ ОПТИМІЗАЦІЇ")
+    print("=" * 60)
+    network.print_network_state()
+
+    # Виводимо фінальні витрати
+    print("\n" + "=" * 60)
+    print("ФІНАЛЬНІ ВИТРАТИ")
+    print("=" * 60)
+    final_costs = network.calculate_costs()
+    network.cost_calculator.print_cost_breakdown(final_costs)
+
+    # Виводимо результати оптимізації
+    optimizer.print_results()
 
     print("\n" + "=" * 60)
-    print("ЕТАП 2 ЗАВЕРШЕНО: ОБЧИСЛЕННЯ ВИТРАТ ПРАЦЮЄ!")
+    print("MVP ЗАВЕРШЕНО: ОПТИМІЗАЦІЯ ПРАЦЮЄ!")
     print("=" * 60)
-    print("\nНаступні кроки:")
-    print("  1. Реалізувати алгоритм МПО (coordinate.py)")
-    print("  2. Додати оптимізацію до main.py")
-    print("  3. Порівняти витрати до та після оптимізації")
 
 
 if __name__ == "__main__":
