@@ -6,6 +6,7 @@
 from typing import List, Dict
 from models.element import Center, Terminal, Consumer
 from services.distance import euclidean_distance, find_nearest_terminal
+from services.cost_calculator import CostCalculator
 
 
 class LogisticsNetwork:
@@ -13,7 +14,8 @@ class LogisticsNetwork:
     Представляє логістичну мережу з центрами, терміналами та споживачами
     """
 
-    def __init__(self, centers: List[Center], terminals: List[Terminal], consumers: List[Consumer]):
+    def __init__(self, centers: List[Center], terminals: List[Terminal], consumers: List[Consumer],
+                 transport_cost_per_unit: float = 1.0):
         """
         Ініціалізує мережу
 
@@ -21,10 +23,12 @@ class LogisticsNetwork:
             centers: Список розподільчих центрів
             terminals: Список терміналів
             consumers: Список споживачів
+            transport_cost_per_unit: Вартість транспортування за одиницю відстані на одиницю товару
         """
         self.centers = centers
         self.terminals = terminals
         self.consumers = consumers
+        self.cost_calculator = CostCalculator(transport_cost_per_unit)
 
         # Ініціалізація початкової мережі
         self._initialize_network()
@@ -107,3 +111,20 @@ class LogisticsNetwork:
             print(f"  ... та ще {len(self.consumers) - 5}")
 
         print("=" * 60)
+
+    def calculate_costs(self) -> Dict[str, float]:
+        """
+        Обчислює витрати поточної конфігурації мережі
+
+        Returns:
+            Словник з детальною розбивкою витрат
+        """
+        center = self.get_center()
+        return self.cost_calculator.calculate_total_cost(center, self.terminals, self.consumers)
+
+    def print_costs(self) -> None:
+        """
+        Обчислює та виводить витрати мережі
+        """
+        costs = self.calculate_costs()
+        self.cost_calculator.print_cost_breakdown(costs)
