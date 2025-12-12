@@ -3,11 +3,74 @@
 Головний файл програми оптимізації логістичної мережі
 """
 
+import os
 import copy
+from pathlib import Path
 from services.data_loader import load_network_from_csv, validate_network_data, print_network_summary
 from models.network import LogisticsNetwork
 from optimizers.coordinate import CoordinateOptimizer
 from services.visualization import NetworkVisualizer
+
+
+def get_csv_files(data_dir: str = 'data') -> list:
+    """
+    Отримує список CSV файлів з директорії
+
+    Args:
+        data_dir: Директорія з даними
+
+    Returns:
+        Список шляхів до CSV файлів
+    """
+    data_path = Path(data_dir)
+    if not data_path.exists():
+        return []
+
+    csv_files = list(data_path.glob('*.csv'))
+    return sorted(csv_files)
+
+
+def display_file_menu(csv_files: list) -> int:
+    """
+    Відображає меню вибору файлів
+
+    Args:
+        csv_files: Список CSV файлів
+
+    Returns:
+        Індекс обраного файлу або -1 для виходу
+    """
+    print("\n" + "=" * 60)
+    print("ДОСТУПНІ ФАЙЛИ ДАНИХ")
+    print("=" * 60)
+
+    if not csv_files:
+        print("Немає CSV файлів у директорії data/")
+        return -1
+
+    for idx, file_path in enumerate(csv_files, 1):
+        print(f"{idx}. {file_path.name}")
+
+    print(f"{len(csv_files) + 1}. Вихід")
+    print("=" * 60)
+
+    while True:
+        try:
+            choice = input(f"\nОберіть файл (1-{len(csv_files) + 1}): ").strip()
+            choice_num = int(choice)
+
+            if choice_num == len(csv_files) + 1:
+                return -1
+
+            if 1 <= choice_num <= len(csv_files):
+                return choice_num - 1
+            else:
+                print(f"Будь ласка, введіть число від 1 до {len(csv_files) + 1}")
+        except ValueError:
+            print("Будь ласка, введіть коректне число")
+        except KeyboardInterrupt:
+            print("\n\nПрограму перервано користувачем")
+            return -1
 
 
 def main():
@@ -18,10 +81,33 @@ def main():
     print("ПРОГРАМА ОПТИМІЗАЦІЇ ЛОГІСТИЧНОЇ МЕРЕЖІ - MVP")
     print("=" * 60)
 
+    # Отримуємо список CSV файлів
+    csv_files = get_csv_files('data')
+
+    if not csv_files:
+        print("\n✗ Не знайдено CSV файлів у директорії data/")
+        print("Створіть файл з даними у форматі CSV та спробуйте знову")
+        return
+
+    # Відображаємо меню та отримуємо вибір користувача
+    selected_idx = display_file_menu(csv_files)
+
+    if selected_idx == -1:
+        print("\nПрограму завершено")
+        return
+
+    selected_file = csv_files[selected_idx]
+    file_basename = selected_file.stem  # Ім'я файлу без розширення
+
+    print(f"\n✓ Обрано файл: {selected_file.name}")
+
     # Крок 1: Завантаження даних
+    print("\n" + "=" * 60)
+    print("ПРОГРАМА ОПТИМІЗАЦІЇ ЛОГІСТИЧНОЇ МЕРЕЖІ - MVP")
+    print("=" * 60)
     print("\n[1/3] Завантаження даних з CSV...")
     try:
-        centers, terminals, consumers = load_network_from_csv('data/network_data.csv')
+        centers, terminals, consumers = load_network_from_csv(str(selected_file))
         print("✓ Дані успішно завантажено")
     except Exception as e:
         print(f"✗ Помилка завантаження даних: {e}")
@@ -100,23 +186,29 @@ def main():
     visualizer = NetworkVisualizer()
 
     # Порівняння мереж до/після
+    network_comparison_path = f'results/{file_basename}_network_comparison.png'
     visualizer.compare_networks(
         network_before=network_before,
         network_after=network,
         costs_before=initial_costs,
         costs_after=final_costs,
-        save_path='results/network_comparison.png'
+        save_path=network_comparison_path
     )
 
     # Порівняння витрат
+    cost_comparison_path = f'results/{file_basename}_cost_comparison.png'
     visualizer.plot_cost_comparison(
         costs_before=initial_costs,
         costs_after=final_costs,
-        save_path='results/cost_comparison.png'
+        save_path=cost_comparison_path
     )
 
     print("\n" + "=" * 60)
     print("MVP ЗАВЕРШЕНО: ОПТИМІЗАЦІЯ ТА ВІЗУАЛІЗАЦІЯ ПРАЦЮЮТЬ!")
+    print("=" * 60)
+    print(f"\n✓ Результати збережено:")
+    print(f"  - {network_comparison_path}")
+    print(f"  - {cost_comparison_path}")
     print("=" * 60)
 
 
