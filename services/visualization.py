@@ -3,6 +3,7 @@
 Візуалізація логістичної мережі
 """
 
+import os
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from typing import List, Optional
@@ -67,17 +68,20 @@ class NetworkVisualizer:
                 color = self.colors['terminal_active']
                 label = 'Активний термінал'
                 marker = '^'
+                # Для заповнених маркерів додаємо рамку
+                ax.scatter(terminal.x, terminal.y, c=color, s=300,
+                          marker=marker, label=label,
+                          edgecolors='black', linewidths=1.5, zorder=4)
             else:
                 color = self.colors['terminal_inactive']
                 label = 'Неактивний термінал'
                 marker = 'x'
+                # Для маркера 'x' не використовуємо edgecolors
+                ax.scatter(terminal.x, terminal.y, c=color, s=300,
+                          marker=marker, label=label, linewidths=2, zorder=4)
 
-            ax.scatter(terminal.x, terminal.y, c=color, s=300, 
-                      marker=marker, label=label,
-                      edgecolors='black', linewidths=1.5, zorder=4)
-            
             status = "✓" if terminal.is_active else "✗"
-            ax.text(terminal.x, terminal.y + 5, f'T{terminal.id} {status}', 
+            ax.text(terminal.x, terminal.y + 5, f'T{terminal.id} {status}',
                    ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         # Малюємо споживачів
@@ -168,6 +172,8 @@ class NetworkVisualizer:
         plt.tight_layout(rect=[0, 0, 1, 0.96])
 
         if save_path:
+            # Створюємо директорію якщо не існує
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"\n📊 Графік збережено: {save_path}")
 
@@ -252,6 +258,8 @@ class NetworkVisualizer:
         plt.tight_layout()
 
         if save_path:
+            # Створюємо директорію якщо не існує
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             print(f"\n📊 Графік витрат збережено: {save_path}")
 
