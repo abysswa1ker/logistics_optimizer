@@ -3,9 +3,11 @@
 Головний файл програми оптимізації логістичної мережі
 """
 
+import copy
 from services.data_loader import load_network_from_csv, validate_network_data, print_network_summary
 from models.network import LogisticsNetwork
 from optimizers.coordinate import CoordinateOptimizer
+from services.visualization import NetworkVisualizer
 
 
 def main():
@@ -56,6 +58,9 @@ def main():
     initial_costs = network.calculate_costs()
     network.cost_calculator.print_cost_breakdown(initial_costs)
 
+    # Зберігаємо копію початкової мережі для візуалізації
+    network_before = copy.deepcopy(network)
+
     # Запуск оптимізації МПО
     print("\n\n" + "=" * 60)
     print("ЗАПУСК ОПТИМІЗАЦІЇ")
@@ -87,8 +92,31 @@ def main():
     # Виводимо результати оптимізації
     optimizer.print_results()
 
+    # Візуалізація
     print("\n" + "=" * 60)
-    print("MVP ЗАВЕРШЕНО: ОПТИМІЗАЦІЯ ПРАЦЮЄ!")
+    print("ГЕНЕРАЦІЯ ГРАФІКІВ")
+    print("=" * 60)
+
+    visualizer = NetworkVisualizer()
+
+    # Порівняння мереж до/після
+    visualizer.compare_networks(
+        network_before=network_before,
+        network_after=network,
+        costs_before=initial_costs,
+        costs_after=final_costs,
+        save_path='results/network_comparison.png'
+    )
+
+    # Порівняння витрат
+    visualizer.plot_cost_comparison(
+        costs_before=initial_costs,
+        costs_after=final_costs,
+        save_path='results/cost_comparison.png'
+    )
+
+    print("\n" + "=" * 60)
+    print("MVP ЗАВЕРШЕНО: ОПТИМІЗАЦІЯ ТА ВІЗУАЛІЗАЦІЯ ПРАЦЮЮТЬ!")
     print("=" * 60)
 
 
