@@ -76,20 +76,24 @@ class NetworkVisualizer:
                 color = self.colors['terminal_inactive']
                 label = 'Неактивний термінал'
                 marker = 'x'
-                # Для маркера 'x' не використовуємо edgecolors
-                ax.scatter(terminal.x, terminal.y, c=color, s=300,
-                          marker=marker, label=label, linewidths=2, zorder=4)
+                # Неактивні термінали: меншого розміру і напівпрозорі
+                ax.scatter(terminal.x, terminal.y, c=color, s=150,
+                          marker=marker, label=label, linewidths=2,
+                          alpha=0.4, zorder=2)
 
             status = "✓" if terminal.is_active else "✗"
+            # Підпис неактивних терміналів теж напівпрозорий
+            alpha_text = 1.0 if terminal.is_active else 0.5
             ax.text(terminal.x, terminal.y + 5, f'T{terminal.id} {status}',
-                   ha='center', va='bottom', fontsize=9, fontweight='bold')
+                   ha='center', va='bottom', fontsize=9, fontweight='bold',
+                   alpha=alpha_text)
 
-        # Малюємо споживачів
+        # Малюємо споживачів (вище неактивних терміналів)
         consumer_x = [c.x for c in network.consumers]
         consumer_y = [c.y for c in network.consumers]
-        ax.scatter(consumer_x, consumer_y, c=self.colors['consumer'], 
+        ax.scatter(consumer_x, consumer_y, c=self.colors['consumer'],
                   s=100, marker='o', label='Споживач',
-                  edgecolors='black', linewidths=0.5, alpha=0.7, zorder=3)
+                  edgecolors='black', linewidths=0.5, alpha=0.8, zorder=3)
 
         # Підписи для перших 5 споживачів
         for i, consumer in enumerate(network.consumers[:5]):
