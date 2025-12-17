@@ -82,11 +82,10 @@ class NetworkVisualizer:
                           alpha=0.4, zorder=2)
 
             status = "✓" if terminal.is_active else "✗"
-            # Підпис неактивних терміналів теж напівпрозорий
-            alpha_text = 1.0 if terminal.is_active else 0.5
-            ax.text(terminal.x, terminal.y + 5, f'T{terminal.id} {status}',
-                   ha='center', va='bottom', fontsize=9, fontweight='bold',
-                   alpha=alpha_text)
+            # Підписуємо тільки активні термінали (неактивні вже позначені сірим хрестиком)
+            if terminal.is_active:
+                ax.text(terminal.x, terminal.y + 5, f'T{terminal.id} {status}',
+                       ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         # Малюємо споживачів (вище неактивних терміналів)
         consumer_x = [c.x for c in network.consumers]
