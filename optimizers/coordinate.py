@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Метод покоординатної оптимізації (МПО)
+Метод покоordinатної оптимізації (МПО)
 """
 
 import copy
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from optimizers.base import Optimizer
 from models.network import LogisticsNetwork
 
@@ -14,7 +14,7 @@ class CoordinateOptimizer(Optimizer):
     Оптимізатор на основі методу покоординатного спуску
     """
 
-    def __init__(self, network: LogisticsNetwork, 
+    def __init__(self, network: LogisticsNetwork,
                  step_size: float = 1.0,
                  max_iterations: int = 100,
                  tolerance: float = 0.01):
@@ -23,9 +23,9 @@ class CoordinateOptimizer(Optimizer):
 
         Args:
             network: Логістична мережа
-            step_size: Розмір кроку для зміни координат
-            max_iterations: Максимальна кількість ітерацій
-            tolerance: Мінімальне покращення для продовження (%)
+            step_size: Не використовується в новій реалізації (для сумісності)
+            max_iterations: Максимальна кількість повних проходів
+            tolerance: Мінімальне покращення між проходами для продовження (абсолютне значення)
         """
         super().__init__(network)
         self.step_size = step_size
@@ -45,60 +45,95 @@ class CoordinateOptimizer(Optimizer):
         # Зберігаємо початкові витрати
         self.initial_cost = self.network.calculate_costs()['total_cost']
         current_cost = self.initial_cost
-        previous_cost = self.initial_cost
+        previous_pass_cost = self.initial_cost
 
         if verbose:
             print(f"\n{'='*60}")
             print("ОПТИМІЗАЦІЯ МЕТОДОМ МПО")
             print(f"{'='*60}")
             print(f"Початкові витрати: {self.initial_cost:,.2f}")
-            print(f"Параметри: крок={self.step_size}, макс_ітерацій={self.max_iterations}, tolerance={self.tolerance}%")
+            print(f"Параметри: макс_проходів={self.max_iterations}, tolerance={self.tolerance}")
             print(f"{'='*60}\n")
 
-        iteration = 0
-        no_improvement_count = 0
+        # Формуємо список можливих локацій (позиції споживачів + центр)
+        possible_locations = self._get_possible_locations()
 
-        # Фаза 1: Оптимізація позицій терміналів (без деактивації)
         if verbose:
-            print("Фаза 1: Оптимізація позицій терміналів")
+            print(f"Можливих локацій для терміналів: {len(possible_locations)}")
+            print(f"Активних терміналів: {sum(1 for t in self.network.terminals if t.is_active)}")
             print("-" * 60)
 
-        while iteration < self.max_iterations:
-            iteration += 1
-            iteration_start_cost = current_cost
-            improved = False
+        pass_number = 0
 
-            # Оптимізація координат кожного терміналу
-            for terminal in self.network.terminals:
+        # Повні проходи по всіх терміналах
+        while pass_number < self.max_iterations:
+            pass_number += 1
+            pass_start_cost = current_cost
+
+            if verbose:
+                print(f"\nПрохід {pass_number}:")
+
+            # Оптимізуємо кожен активний термінал
+            for terminal_idx, terminal in enumerate(self.network.terminals):
                 if not terminal.is_active:
                     continue
 
-                # Пробуємо оптимізувати позицію терміналу
-                new_cost = self._optimize_terminal_position(terminal, current_cost)
+                # Перебираємо всі можливі локації для цього терміналу
+                best_cost = current_cost
+                best_location = (terminal.x, terminal.y)
+                original_x, original_y = terminal.x, terminal.y
 
-                if new_cost < current_cost:
-                    improvement_pct = ((current_cost - new_cost) / current_cost) * 100
+                for loc_x, loc_y in possible_locations:
+                    # Пропускаємо поточну позицію
+                    if loc_x == original_x and loc_y == original_y:
+                        continue
+
+                    # Пробуємо нову локацію
+                    terminal.x = loc_x
+                    terminal.y = loc_y
+
+                    # Перерозподіляємо споживачів
+                    self.network.assign_consumers_to_terminals()
+
+                    # Обчислюємо витрати
+                    new_cost = self.network.calculate_costs()['total_cost']
+
+                    # Зберігаємо найкращу локацію
+                    if new_cost < best_cost:
+                        best_cost = new_cost
+                        best_location = (loc_x, loc_y)
+
+                # Встановлюємо найкращу знайдену позицію
+                terminal.x, terminal.y = best_location
+                self.network.assign_consumers_to_terminals()
+
+                # Оновлюємо поточну вартість
+                if best_cost < current_cost:
+                    improvement = current_cost - best_cost
+                    improvement_pct = (improvement / current_cost) * 100
+                    current_cost = best_cost
+
                     if verbose:
-                        print(f"Ітерація {iteration}: Термінал {terminal.id} " +
-                              f"переміщено, покращення: {improvement_pct:.3f}%")
-                    current_cost = new_cost
-                    improved = True
-                    no_improvement_count = 0
-                else:
-                    no_improvement_count += 1
+                        print(f"  Термінал {terminal.id}: переміщено на ({best_location[0]:.0f}, {best_location[1]:.0f}), "
+                              f"покращення {improvement_pct:.2f}%")
 
-            # Виводимо прогрес
-            if verbose and improved:
-                total_improvement = ((self.initial_cost - current_cost) / self.initial_cost) * 100
-                print(f"  → Загальне покращення: {total_improvement:.2f}%")
+            # Перевірка збіжності після повного проходу
+            pass_improvement = pass_start_cost - current_cost
 
-            # Якщо немає покращень протягом кількох ітерацій, переходимо до фази 2
-            if not improved:
+            if verbose:
+                total_improvement_pct = ((self.initial_cost - current_cost) / self.initial_cost) * 100
+                print(f"  → Покращення на проході: {pass_improvement:.2f}")
+                print(f"  → Загальне покращення: {total_improvement_pct:.2f}%")
+
+            # Якщо покращення менше tolerance, зупиняємось
+            if pass_improvement < self.tolerance:
                 if verbose:
-                    print(f"\nНемає покращень на ітерації {iteration}.")
+                    print(f"\nЗбіжність досягнута: покращення {pass_improvement:.2f} < tolerance {self.tolerance}")
                 break
 
-        # Фаза 2: Перевірка деактивації терміналів
+            previous_pass_cost = current_cost
+
+        # Фаза 2: Перевірка доцільності терміналів
         if verbose:
             print(f"\n{'='*60}")
             print("Фаза 2: Перевірка доцільності терміналів")
@@ -126,69 +161,37 @@ class CoordinateOptimizer(Optimizer):
                 break
 
         self.final_cost = current_cost
-        total_iterations = iteration + deactivation_iterations
 
         if verbose:
             print(f"\n{'='*60}")
             print(f"Оптимізація завершена:")
-            print(f"  - Фаза 1 (переміщення): {iteration} ітерацій")
+            print(f"  - Фаза 1 (оптимізація позицій): {pass_number} проходів")
             print(f"  - Фаза 2 (деактивація): {deactivation_iterations} перевірок")
-            print(f"  - Всього: {total_iterations} операцій")
             print(f"{'='*60}")
 
         return self.get_improvement()
 
-    def _optimize_terminal_position(self, terminal, current_cost: float) -> float:
+    def _get_possible_locations(self) -> List[Tuple[float, float]]:
         """
-        Оптимізує позицію одного терміналу
-
-        Args:
-            terminal: Термінал для оптимізації
-            current_cost: Поточні витрати
+        Формує список можливих локацій для терміналів
 
         Returns:
-            Нові витрати після оптимізації
+            Список координат (x, y)
         """
-        best_cost = current_cost
-        best_x, best_y = terminal.x, terminal.y
+        locations = []
 
-        # Зберігаємо початкові координати
-        original_x, original_y = terminal.x, terminal.y
+        # Додаємо позиції всіх споживачів
+        for consumer in self.network.consumers:
+            locations.append((consumer.x, consumer.y))
 
-        # Пробуємо рухатись у 4 напрямках: вгору, вниз, вліво, вправо
-        directions = [
-            (self.step_size, 0),   # вправо
-            (-self.step_size, 0),  # вліво
-            (0, self.step_size),   # вгору
-            (0, -self.step_size),  # вниз
-        ]
+        # Додаємо позицію центру
+        for center in self.network.centers:
+            locations.append((center.x, center.y))
 
-        for dx, dy in directions:
-            # Пробуємо нову позицію
-            terminal.x = original_x + dx
-            terminal.y = original_y + dy
+        # Видаляємо дублікати
+        unique_locations = list(set(locations))
 
-            # Перерозподіляємо споживачів до найближчих терміналів
-            self.network.assign_consumers_to_terminals()
-
-            # Обчислюємо нові витрати
-            new_cost = self.network.calculate_costs()['total_cost']
-
-            # Якщо витрати менші, зберігаємо
-            if new_cost < best_cost:
-                best_cost = new_cost
-                best_x = terminal.x
-                best_y = terminal.y
-
-        # Встановлюємо найкращу знайдену позицію
-        terminal.x = best_x
-        terminal.y = best_y
-
-        # Якщо змінилась позиція, перерозподіляємо споживачів
-        if best_x != original_x or best_y != original_y:
-            self.network.assign_consumers_to_terminals()
-
-        return best_cost
+        return unique_locations
 
     def _try_deactivate_terminals(self, current_cost: float, verbose: bool = False) -> bool:
         """
