@@ -45,18 +45,20 @@ class CoordinateOptimizer(Optimizer):
         # Зберігаємо початкові витрати
         self.initial_cost = self.network.calculate_costs()['total_cost']
         current_cost = self.initial_cost
+        previous_cost = self.initial_cost
 
         if verbose:
             print(f"\n{'='*60}")
             print("ОПТИМІЗАЦІЯ МЕТОДОМ МПО")
             print(f"{'='*60}")
             print(f"Початкові витрати: {self.initial_cost:,.2f}")
-            print(f"Параметри: крок={self.step_size}, макс_ітерацій={self.max_iterations}")
+            print(f"Параметри: крок={self.step_size}, макс_ітерацій={self.max_iterations}, tolerance={self.tolerance}%")
             print(f"{'='*60}\n")
 
         iteration = 0
         while iteration < self.max_iterations:
             iteration += 1
+            iteration_start_cost = current_cost
             improved = False
 
             # Оптимізація координат кожного терміналу
@@ -71,30 +73,32 @@ class CoordinateOptimizer(Optimizer):
                     improvement_pct = ((current_cost - new_cost) / current_cost) * 100
                     if verbose:
                         print(f"Ітерація {iteration}: Термінал {terminal.id} " +
-                              f"оптимізовано, покращення: {improvement_pct:.3f}%")
+                              f"переміщено, покращення: {improvement_pct:.3f}%")
                     current_cost = new_cost
                     improved = True
 
-            # Перевірка на можливість вимкнути термінали
-            deactivated = self._try_deactivate_terminals(current_cost, verbose)
-            if deactivated:
-                new_cost = self.network.calculate_costs()['total_cost']
-                if new_cost < current_cost:
-                    current_cost = new_cost
-                    improved = True
+            # Перевірка на можливість вимкнути термінали (тільки кожні 5 ітерацій)
+            if iteration % 5 == 0:
+                deactivated = self._try_deactivate_terminals(current_cost, verbose)
+                if deactivated:
+                    new_cost = self.network.calculate_costs()['total_cost']
+                    if new_cost < current_cost:
+                        current_cost = new_cost
+                        improved = True
 
-            # Якщо немає покращень, зупиняємо
+            # Перевірка покращення на поточній ітерації
+            iteration_improvement = ((iteration_start_cost - current_cost) / iteration_start_cost) * 100
+
+            # Якщо немає покращень на ітерації, зупиняємо
             if not improved:
                 if verbose:
                     print(f"\nНемає покращень на ітерації {iteration}. Зупинка.")
                 break
 
-            # Перевірка на мінімальне покращення
-            improvement = ((self.initial_cost - current_cost) / self.initial_cost) * 100
-            if improvement < self.tolerance:
-                if verbose:
-                    print(f"\nПокращення {improvement:.3f}% менше ніж tolerance {self.tolerance}%. Зупинка.")
-                break
+            # Виводимо прогрес
+            if verbose and iteration_improvement > 0:
+                total_improvement = ((self.initial_cost - current_cost) / self.initial_cost) * 100
+                print(f"  → Загальне покращення: {total_improvement:.2f}%")
 
         self.final_cost = current_cost
 
