@@ -56,6 +56,13 @@ class CoordinateOptimizer(Optimizer):
             print(f"{'='*60}\n")
 
         iteration = 0
+        no_improvement_count = 0
+
+        # Фаза 1: Оптимізація позицій терміналів (без деактивації)
+        if verbose:
+            print("Фаза 1: Оптимізація позицій терміналів")
+            print("-" * 60)
+
         while iteration < self.max_iterations:
             iteration += 1
             iteration_start_cost = current_cost
@@ -76,35 +83,57 @@ class CoordinateOptimizer(Optimizer):
                               f"переміщено, покращення: {improvement_pct:.3f}%")
                     current_cost = new_cost
                     improved = True
-
-            # Перевірка на можливість вимкнути термінали (тільки кожні 5 ітерацій)
-            if iteration % 5 == 0:
-                deactivated = self._try_deactivate_terminals(current_cost, verbose)
-                if deactivated:
-                    new_cost = self.network.calculate_costs()['total_cost']
-                    if new_cost < current_cost:
-                        current_cost = new_cost
-                        improved = True
-
-            # Перевірка покращення на поточній ітерації
-            iteration_improvement = ((iteration_start_cost - current_cost) / iteration_start_cost) * 100
-
-            # Якщо немає покращень на ітерації, зупиняємо
-            if not improved:
-                if verbose:
-                    print(f"\nНемає покращень на ітерації {iteration}. Зупинка.")
-                break
+                    no_improvement_count = 0
+                else:
+                    no_improvement_count += 1
 
             # Виводимо прогрес
-            if verbose and iteration_improvement > 0:
+            if verbose and improved:
                 total_improvement = ((self.initial_cost - current_cost) / self.initial_cost) * 100
                 print(f"  → Загальне покращення: {total_improvement:.2f}%")
 
+            # Якщо немає покращень протягом кількох ітерацій, переходимо до фази 2
+            if not improved:
+                if verbose:
+                    print(f"\nНемає покращень на ітерації {iteration}.")
+                break
+
+        # Фаза 2: Перевірка деактивації терміналів
+        if verbose:
+            print(f"\n{'='*60}")
+            print("Фаза 2: Перевірка доцільності терміналів")
+            print("-" * 60)
+
+        deactivation_iterations = 0
+        max_deactivation_iterations = 10
+
+        while deactivation_iterations < max_deactivation_iterations:
+            deactivation_iterations += 1
+            deactivated = self._try_deactivate_terminals(current_cost, verbose)
+
+            if deactivated:
+                new_cost = self.network.calculate_costs()['total_cost']
+                if new_cost < current_cost:
+                    current_cost = new_cost
+                    if verbose:
+                        total_improvement = ((self.initial_cost - current_cost) / self.initial_cost) * 100
+                        print(f"  → Загальне покращення: {total_improvement:.2f}%")
+                else:
+                    break
+            else:
+                if verbose:
+                    print("Всі активні термінали необхідні")
+                break
+
         self.final_cost = current_cost
+        total_iterations = iteration + deactivation_iterations
 
         if verbose:
             print(f"\n{'='*60}")
-            print(f"Оптимізація завершена за {iteration} ітерацій")
+            print(f"Оптимізація завершена:")
+            print(f"  - Фаза 1 (переміщення): {iteration} ітерацій")
+            print(f"  - Фаза 2 (деактивація): {deactivation_iterations} перевірок")
+            print(f"  - Всього: {total_iterations} операцій")
             print(f"{'='*60}")
 
         return self.get_improvement()

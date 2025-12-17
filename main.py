@@ -154,8 +154,8 @@ def main():
 
     optimizer = CoordinateOptimizer(
         network=network,
-        step_size=2.0,
-        max_iterations=50,
+        step_size=5.0,  # Збільшено для швидшого переміщення
+        max_iterations=100,  # Збільшено для повної оптимізації
         tolerance=0.1
     )
 
