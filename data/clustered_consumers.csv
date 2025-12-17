@@ -1,0 +1,17 @@
+id,x,y,type,demand,terminal_cost,processing_cost
+1,50,50,center,0,0,0
+10,30,30,terminal,0,5000,3.0
+11,70,70,terminal,0,5000,3.0
+12,30,70,terminal,0,5000,3.0
+100,15,15,consumer,80,0,0
+101,18,12,consumer,90,0,0
+102,12,18,consumer,70,0,0
+103,20,15,consumer,85,0,0
+200,85,85,consumer,100,0,0
+201,88,82,consumer,95,0,0
+202,82,88,consumer,105,0,0
+203,90,85,consumer,110,0,0
+300,15,85,consumer,60,0,0
+301,18,88,consumer,75,0,0
+302,12,82,consumer,65,0,0
+303,20,88,consumer,70,0,0
