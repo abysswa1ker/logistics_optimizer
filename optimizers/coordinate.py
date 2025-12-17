@@ -175,23 +175,38 @@ class CoordinateOptimizer(Optimizer):
         """
         Формує список можливих локацій для терміналів
 
+        Створює сітку потенційних локацій на основі розміщення споживачів,
+        але НЕ в точних позиціях споживачів (щоб уникнути колізій)
+
         Returns:
             Список координат (x, y)
         """
-        locations = []
+        locations = set()
 
-        # Додаємо позиції всіх споживачів
-        for consumer in self.network.consumers:
-            locations.append((consumer.x, consumer.y))
+        # Знаходимо межі області
+        min_x = min(c.x for c in self.network.consumers)
+        max_x = max(c.x for c in self.network.consumers)
+        min_y = min(c.y for c in self.network.consumers)
+        max_y = max(c.y for c in self.network.consumers)
 
-        # Додаємо позицію центру
+        # Створюємо сітку з кроком 5 одиниць
+        grid_step = 5
+        for x in range(int(min_x), int(max_x) + 1, grid_step):
+            for y in range(int(min_y), int(max_y) + 1, grid_step):
+                # Перевіряємо що ця локація не співпадає з споживачем
+                is_consumer_location = any(
+                    abs(c.x - x) < 0.1 and abs(c.y - y) < 0.1
+                    for c in self.network.consumers
+                )
+
+                if not is_consumer_location:
+                    locations.add((float(x), float(y)))
+
+        # Додаємо позицію центру (завжди дозволена)
         for center in self.network.centers:
-            locations.append((center.x, center.y))
+            locations.add((center.x, center.y))
 
-        # Видаляємо дублікати
-        unique_locations = list(set(locations))
-
-        return unique_locations
+        return list(locations)
 
     def _try_deactivate_terminals(self, current_cost: float, verbose: bool = False) -> bool:
         """
