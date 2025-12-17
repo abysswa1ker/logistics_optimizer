@@ -91,9 +91,10 @@ class CostCalculator:
             # Загальний попит для цього терміналу
             total_demand = sum(c.demand for c in terminal_consumers)
 
-            # Вартість Center → Terminal
+            # Вартість Center → Terminal (зменшений коефіцієнт для кращої оптимізації)
+            # Транспорт оптом від центру дешевший ніж роздрібна доставка споживачам
             distance_center_terminal = euclidean_distance(center, terminal)
-            center_to_terminal_cost += distance_center_terminal * self.transport_cost_per_unit * total_demand
+            center_to_terminal_cost += distance_center_terminal * self.transport_cost_per_unit * total_demand * 0.1
 
             # Вартість Terminal → Consumers
             for consumer in terminal_consumers:
