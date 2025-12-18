@@ -271,13 +271,15 @@ class Optimizer(ABC):
 
 **Файл:** `optimizers/coordinate.py`
 
+**Реалізація:** Класична специфікація p-median problem з перебором локацій
+
 #### Алгоритм
 
 ```python
 class CoordinateOptimizer(Optimizer):
-    step_size: float        # Розмір кроку (default: 1.0)
-    max_iterations: int     # Макс. ітерацій (default: 100)
-    tolerance: float        # Мін. покращення % (default: 0.01)
+    step_size: float        # Не використовується (для сумісності)
+    max_iterations: int     # Макс. проходів (default: 100)
+    tolerance: float        # Мін. покращення між проходами (default: 0.01)
 ```
 
 #### Псевдокод
@@ -285,56 +287,66 @@ class CoordinateOptimizer(Optimizer):
 ```
 function OPTIMIZE():
     initial_cost = calculate_costs()
-    
-    for iteration in 1..max_iterations:
-        improved = False
-        
-        // Оптимізація координат
+    possible_locations = create_location_grid()  // Сітка з кроком 5
+
+    // Фаза 1: Оптимізація позицій терміналів
+    for pass in 1..max_iterations:
+        pass_start_cost = current_cost
+
+        // Оптимізація кожного терміналу
         for each active_terminal:
-            new_cost = optimize_terminal_position(terminal)
-            if new_cost < current_cost:
-                current_cost = new_cost
-                improved = True
-        
-        // Спроба вимкнути термінали
-        if try_deactivate_terminals():
-            improved = True
-        
-        if not improved:
+            best_location = current_location
+            best_cost = current_cost
+
+            // Перебір ВСІХ можливих локацій
+            for each location in possible_locations:
+                terminal.move_to(location)
+                reassign_consumers()
+                new_cost = calculate_costs()
+
+                if new_cost < best_cost:
+                    best_cost = new_cost
+                    best_location = location
+
+            terminal.move_to(best_location)
+            current_cost = best_cost
+
+        // Перевірка збіжності між проходами
+        if (pass_start_cost - current_cost) < tolerance:
             break
-    
+
+    // Фаза 2: Перевірка доцільності терміналів
+    for each active_terminal:
+        deactivate(terminal)
+        new_cost = calculate_costs()
+        if new_cost < current_cost:
+            current_cost = new_cost  // Залишаємо деактивованим
+        else:
+            activate(terminal)       // Повертаємо назад
+
     return results
 ```
 
-#### Оптимізація позиції терміналу
+#### Формування можливих локацій
 
 ```python
-def _optimize_terminal_position(terminal, current_cost) -> float:
+def _get_possible_locations() -> List[Tuple[float, float]]:
     """
-    1. Зберігає поточні координати
-    2. Пробує 4 напрямки: вгору, вниз, вліво, вправо
-    3. Для кожного напрямку:
-       - Зміщує термінал на step_size
-       - Перерозподіляє споживачів
-       - Обчислює нові витрати
-    4. Вибирає напрямок з найменшими витратами
-    5. Повертає нові витрати
+    Створює сітку потенційних локацій:
+    1. Знаходить межі області (min/max координат споживачів)
+    2. Створює регулярну сітку з кроком 5 одиниць
+    3. Виключає локації, що співпадають зі споживачами (epsilon < 0.1)
+    4. Додає позицію центру
+
+    Результат: набір дискретних локацій для розміщення терміналів
     """
 ```
 
-**Напрямки руху:**
-```python
-directions = [
-    (step_size, 0),    # вправо
-    (-step_size, 0),   # вліво
-    (0, step_size),    # вгору
-    (0, -step_size),   # вниз
-]
-```
-
-**Складність:** O(4 × C × N), де:
+**Складність:** O(L × C × N × P), де:
+- L - кількість можливих локацій (~400 для області 100×100)
 - C - кількість споживачів
 - N - кількість терміналів
+- P - кількість проходів (зазвичай 2-5)
 
 #### Вимикання терміналів
 
@@ -366,13 +378,18 @@ F(x) = Σ(fixed_costs) + Σ(processing_costs) + Σ(transport_costs)
 
 де:
   fixed_costs = Σ(terminal_cost_i) для активних терміналів i
-  
+
   processing_costs = Σ(processing_cost_i × demand_i) для терміналів i
-  
-  transport_costs = 
-    Σ(dist(center, terminal_i) × transport_cost × demand_i) +
+
+  transport_costs =
+    Σ(dist(center, terminal_i) × transport_cost × demand_i × 0.1) +
     Σ(dist(terminal_i, consumer_j) × transport_cost × demand_j)
 ```
+
+**Коефіцієнт 0.1 для центр→термінали:**
+- Логіка: транспорт оптом від центру дешевший ніж роздрібна доставка
+- Великі вантажівки центр→термінали vs малі машини термінали→споживачі
+- Без цього коефіцієнта оптимально розміщувати всі термінали в центрі
 
 **Мета:** Мінімізувати F(x)
 
@@ -409,16 +426,23 @@ def plot_network(network, title, show_connections=True, ax=None)
 ```
 
 **Елементи візуалізації:**
-1. Центр - червоний квадрат (500pt)
-2. Активні термінали - бірюзові трикутники (300pt)
-3. Неактивні термінали - сірі хрестики (300pt)
-4. Споживачі - сині кружки (100pt)
-5. З'єднання - сірі лінії
+1. Центр - червоний квадрат (500pt, alpha=1.0)
+2. Активні термінали - бірюзові трикутники (300pt, alpha=1.0) з підписами
+3. Неактивні термінали - сірі хрестики (150pt, alpha=0.4) **без підписів**
+4. Споживачі - сині кружки (100pt, alpha=0.8)
+5. З'єднання - сірі лінії (alpha=0.3)
+
+**Покращення візуалізації неактивних терміналів:**
+- Менший розмір: 300pt → 150pt (не перекривають споживачів)
+- Напівпрозорі: alpha=0.4 (менш помітні)
+- Без підписів: тільки сірий хрестик (уникає плутанини)
+- Нижчий шар: zorder=2 (під споживачами)
 
 **Z-order шари:**
 - 5: Центр (найвище)
-- 4: Термінали
+- 4: Активні термінали
 - 3: Споживачі
+- 2: Неактивні термінали
 - 1: З'єднання (найнижче)
 
 ##### Порівняння мереж
@@ -443,6 +467,45 @@ def plot_cost_comparison(costs_before, costs_after, save_path)
 Створює 2 графіки:
 1. **Стовпчикова діаграма** - витрати по категоріях
 2. **Загальні витрати** - до/після зі стрілкою економії
+
+---
+
+## Інтерактивний режим
+
+### Вибір файлів даних (main.py)
+
+Програма підтримує інтерактивний вибір CSV файлів з директорії `data/`.
+
+#### Функції
+
+```python
+def get_csv_files(data_dir: str = 'data') -> list
+```
+**Призначення:** Сканує директорію та повертає список CSV файлів
+
+```python
+def display_file_menu(csv_files: list) -> int
+```
+**Призначення:**
+- Відображає пронумерований список файлів
+- Приймає вибір користувача (1-N)
+- Повертає індекс обраного файлу або -1 для виходу
+
+#### Робочий процес
+
+```
+1. get_csv_files('data/') → список CSV
+2. display_file_menu(csv_files) → вибір користувача
+3. selected_file = csv_files[selected_idx]
+4. file_basename = selected_file.stem
+5. Оптимізація...
+6. Збереження результатів: results/{file_basename}_*.png
+```
+
+**Переваги:**
+- Зручна робота з кількома тестовими мережами
+- Результати зберігаються з унікальними іменами
+- Можливість порівняння різних конфігурацій
 
 ---
 
@@ -588,10 +651,10 @@ total_cost = costs + α × delivery_time
 
 ### Поточна складність
 
-**МПО:**
-- Одна ітерація: O(T × 4 × (C × T))
-- Де T - термінали, C - споживачі
-- Загальна: O(I × T² × C), I - ітерації
+**МПО (з перебором локацій):**
+- Один прохід: O(L × N × C)
+- Де L - кількість можливих локацій, N - термінали, C - споживачі
+- Загальна: O(P × L × N × C), P - кількість проходів
 
 ### Можливі покращення
 
