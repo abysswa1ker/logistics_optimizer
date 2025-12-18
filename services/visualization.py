@@ -140,10 +140,11 @@ class NetworkVisualizer:
                        color=self.colors['connection'], linewidth=0.5, 
                        linestyle='--', alpha=0.3, zorder=1)
 
-    def compare_networks(self, network_before: LogisticsNetwork, 
+    def compare_networks(self, network_before: LogisticsNetwork,
                         network_after: LogisticsNetwork,
                         costs_before: dict, costs_after: dict,
-                        save_path: Optional[str] = None):
+                        save_path: Optional[str] = None,
+                        optimizer_name: str = "Оптимізація"):
         """
         Порівнює дві мережі (до та після оптимізації)
 
@@ -153,19 +154,20 @@ class NetworkVisualizer:
             costs_before: Витрати до оптимізації
             costs_after: Витрати після оптимізації
             save_path: Шлях для збереження графіка
+            optimizer_name: Назва методу оптимізації для відображення
         """
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
 
         # Ліва панель - до оптимізації
-        self.plot_network(network_before, 
+        self.plot_network(network_before,
                          title=f"До оптимізації\nВитрати: {costs_before['total_cost']:,.2f}",
                          ax=ax1)
 
         # Права панель - після оптимізації
-        improvement_pct = ((costs_before['total_cost'] - costs_after['total_cost']) / 
+        improvement_pct = ((costs_before['total_cost'] - costs_after['total_cost']) /
                           costs_before['total_cost']) * 100
         self.plot_network(network_after,
-                         title=f"Після оптимізації (МПО)\nВитрати: {costs_after['total_cost']:,.2f} (↓{improvement_pct:.1f}%)",
+                         title=f"Після оптимізації ({optimizer_name})\nВитрати: {costs_after['total_cost']:,.2f} (↓{improvement_pct:.1f}%)",
                          ax=ax2)
 
         # Загальний заголовок

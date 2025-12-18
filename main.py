@@ -356,8 +356,17 @@ def main():
         comparison_results = run_comparison(network, initial_costs)
         print_comparison_table(comparison_results)
 
-        # Використовуємо результат МПО для візуалізації (як кращий)
-        network_after = comparison_results['mpo']['network']
+        # Використовуємо результат кращого методу для візуалізації
+        mpo_cost = comparison_results['mpo']['final_cost']
+        ga_cost = comparison_results['ga']['final_cost']
+
+        if mpo_cost <= ga_cost:
+            network_after = comparison_results['mpo']['network']
+            optimizer_name = "МПО - кращий"
+        else:
+            network_after = comparison_results['ga']['network']
+            optimizer_name = "ЕМ-ГА - кращий"
+
         final_costs = network_after.calculate_costs()
 
     elif optimization_mode == 'mpo':
@@ -378,6 +387,7 @@ def main():
 
         network_after = network
         final_costs = network.calculate_costs()
+        optimizer_name = "МПО"
 
     else:  # optimization_mode == 'ga'
         # Тільки ЕМ-ГА
@@ -398,6 +408,7 @@ def main():
 
         network_after = network
         final_costs = network.calculate_costs()
+        optimizer_name = "ЕМ-ГА"
 
     # Візуалізація (для всіх режимів)
     print("\n" + "=" * 60)
@@ -414,7 +425,8 @@ def main():
         network_after=network_after,
         costs_before=initial_costs,
         costs_after=final_costs,
-        save_path=network_comparison_path
+        save_path=network_comparison_path,
+        optimizer_name=optimizer_name
     )
 
     # Порівняння витрат
