@@ -5,10 +5,12 @@
 
 import os
 import copy
+import time
 from pathlib import Path
 from services.data_loader import load_network_from_csv, validate_network_data, print_network_summary
 from models.network import LogisticsNetwork
 from optimizers.coordinate import CoordinateOptimizer
+from optimizers.genetic import GeneticOptimizer
 from services.visualization import NetworkVisualizer
 
 
@@ -71,6 +73,200 @@ def display_file_menu(csv_files: list) -> int:
         except KeyboardInterrupt:
             print("\n\nПрограму перервано користувачем")
             return -1
+
+
+def display_optimization_mode_menu() -> str:
+    """
+    Відображає меню вибору режиму оптимізації
+
+    Returns:
+        'mpo' для МПО, 'ga' для ГА, 'compare' для порівняння, '' для виходу
+    """
+    print("\n" + "=" * 60)
+    print("ВИБЕРІТЬ РЕЖИМ ОПТИМІЗАЦІЇ")
+    print("=" * 60)
+    print("1. Тільки МПО (Метод покоординатного спуску)")
+    print("2. Тільки ЕМ-ГА (Еволюційний метод - генетичний алгоритм)")
+    print("3. Порівняння обох методів")
+    print("4. Вихід")
+    print("=" * 60)
+
+    while True:
+        try:
+            choice = input("\nОберіть режим (1-4): ").strip()
+            choice_num = int(choice)
+
+            if choice_num == 1:
+                return 'mpo'
+            elif choice_num == 2:
+                return 'ga'
+            elif choice_num == 3:
+                return 'compare'
+            elif choice_num == 4:
+                return ''
+            else:
+                print("Будь ласка, введіть число від 1 до 4")
+        except ValueError:
+            print("Будь ласка, введіть коректне число")
+        except KeyboardInterrupt:
+            print("\n\nПрограму перервано користувачем")
+            return ''
+
+
+def run_comparison(network: LogisticsNetwork, initial_costs: dict):
+    """
+    Запускає порівняльний аналіз МПО та ЕМ-ГА
+
+    Args:
+        network: Логістична мережа
+        initial_costs: Початкові витрати мережі
+
+    Returns:
+        Словник з результатами обох методів
+    """
+    print("\n" + "=" * 60)
+    print("ПОРІВНЯЛЬНИЙ АНАЛІЗ МЕТОДІВ ОПТИМІЗАЦІЇ")
+    print("=" * 60)
+    print("\nБудуть послідовно запущені два методи на однакових вхідних даних:")
+    print("  1. МПО (Метод покоординатного спуску)")
+    print("  2. ЕМ-ГА (Еволюційний метод - генетичний алгоритм)")
+    print("=" * 60)
+
+    results = {}
+
+    # Запуск МПО
+    print("\n\n" + "=" * 60)
+    print("МЕТОД 1: МПО (МЕТОД ПОКООРДИНАТНОГО СПУСКУ)")
+    print("=" * 60)
+
+    # Створюємо копію мережі для МПО
+    network_mpo = copy.deepcopy(network)
+
+    start_time = time.time()
+    optimizer_mpo = CoordinateOptimizer(
+        network=network_mpo,
+        step_size=5.0,
+        max_iterations=100,
+        tolerance=0.1
+    )
+    mpo_results = optimizer_mpo.optimize(verbose=True)
+    mpo_time = time.time() - start_time
+
+    # Підраховуємо активні термінали
+    mpo_active_terminals = sum(1 for t in network_mpo.terminals if t.is_active)
+
+    results['mpo'] = {
+        'initial_cost': mpo_results['initial_cost'],
+        'final_cost': mpo_results['final_cost'],
+        'absolute_improvement': mpo_results['absolute_improvement'],
+        'percentage_improvement': mpo_results['percentage_improvement'],
+        'active_terminals': mpo_active_terminals,
+        'execution_time': mpo_time,
+        'network': network_mpo
+    }
+
+    # Запуск ЕМ-ГА
+    print("\n\n" + "=" * 60)
+    print("МЕТОД 2: ЕМ-ГА (ЕВОЛЮЦІЙНИЙ МЕТОД - ГЕНЕТИЧНИЙ АЛГОРИТМ)")
+    print("=" * 60)
+
+    # Створюємо копію мережі для ГА
+    network_ga = copy.deepcopy(network)
+
+    start_time = time.time()
+    optimizer_ga = GeneticOptimizer(
+        network=network_ga,
+        population_size=50,
+        generations=100,
+        mutation_rate=0.1,
+        crossover_rate=0.8
+    )
+    ga_results = optimizer_ga.optimize(verbose=True)
+    ga_time = time.time() - start_time
+
+    # Підраховуємо активні термінали
+    ga_active_terminals = sum(1 for t in network_ga.terminals if t.is_active)
+
+    results['ga'] = {
+        'initial_cost': ga_results['initial_cost'],
+        'final_cost': ga_results['final_cost'],
+        'absolute_improvement': ga_results['absolute_improvement'],
+        'percentage_improvement': ga_results['percentage_improvement'],
+        'active_terminals': ga_active_terminals,
+        'execution_time': ga_time,
+        'network': network_ga
+    }
+
+    return results
+
+
+def print_comparison_table(results: dict):
+    """
+    Виводить порівняльну таблицю результатів
+
+    Args:
+        results: Словник з результатами обох методів
+    """
+    print("\n\n" + "=" * 80)
+    print("ПОРІВНЯЛЬНА ТАБЛИЦЯ РЕЗУЛЬТАТІВ")
+    print("=" * 80)
+
+    # Заголовок таблиці
+    print(f"\n{'Показник':<40} {'МПО':>15} {'ЕМ-ГА':>15}")
+    print("-" * 80)
+
+    mpo = results['mpo']
+    ga = results['ga']
+
+    # Рядки таблиці
+    print(f"{'Початкові витрати (грн)':<40} {mpo['initial_cost']:>15,.2f} {ga['initial_cost']:>15,.2f}")
+    print(f"{'Фінальні витрати (грн)':<40} {mpo['final_cost']:>15,.2f} {ga['final_cost']:>15,.2f}")
+    print(f"{'Абсолютне покращення (грн)':<40} {mpo['absolute_improvement']:>15,.2f} {ga['absolute_improvement']:>15,.2f}")
+    print(f"{'Відносне покращення (%)':<40} {mpo['percentage_improvement']:>15,.2f} {ga['percentage_improvement']:>15,.2f}")
+    print(f"{'Активних терміналів після оптимізації':<40} {mpo['active_terminals']:>15} {ga['active_terminals']:>15}")
+    print(f"{'Час виконання (сек)':<40} {mpo['execution_time']:>15,.2f} {ga['execution_time']:>15,.2f}")
+
+    print("=" * 80)
+
+    # Визначаємо кращий метод
+    print("\n" + "=" * 80)
+    print("ВИСНОВОК")
+    print("=" * 80)
+
+    # Порівнюємо за фінальними витратами (нижчі = краще)
+    if mpo['final_cost'] < ga['final_cost']:
+        better_method = "МПО"
+        cost_diff = ga['final_cost'] - mpo['final_cost']
+        print(f"\n🏆 Кращий результат показав метод: {better_method}")
+        print(f"\n   МПО досяг на {cost_diff:,.2f} грн нижчих витрат, ніж ЕМ-ГА")
+        print(f"   ({mpo['final_cost']:,.2f} грн проти {ga['final_cost']:,.2f} грн)")
+    elif ga['final_cost'] < mpo['final_cost']:
+        better_method = "ЕМ-ГА"
+        cost_diff = mpo['final_cost'] - ga['final_cost']
+        print(f"\n🏆 Кращий результат показав метод: {better_method}")
+        print(f"\n   ЕМ-ГА досяг на {cost_diff:,.2f} грн нижчих витрат, ніж МПО")
+        print(f"   ({ga['final_cost']:,.2f} грн проти {mpo['final_cost']:,.2f} грн)")
+    else:
+        print(f"\n🤝 Обидва методи показали однакові фінальні витрати")
+        print(f"   ({mpo['final_cost']:,.2f} грн)")
+
+    # Додаткові спостереження
+    print(f"\nДодаткові спостереження:")
+
+    # Порівняння швидкості
+    if mpo['execution_time'] < ga['execution_time']:
+        time_diff = ga['execution_time'] - mpo['execution_time']
+        print(f"  • МПО працював швидше на {time_diff:.2f} сек")
+    elif ga['execution_time'] < mpo['execution_time']:
+        time_diff = mpo['execution_time'] - ga['execution_time']
+        print(f"  • ЕМ-ГА працював швидше на {time_diff:.2f} сек")
+
+    # Порівняння кількості активних терміналів
+    if mpo['active_terminals'] != ga['active_terminals']:
+        print(f"  • МПО залишив {mpo['active_terminals']} активних терміналів, "
+              f"ЕМ-ГА - {ga['active_terminals']}")
+
+    print("=" * 80)
 
 
 def main():
@@ -147,38 +343,63 @@ def main():
     # Зберігаємо копію початкової мережі для візуалізації
     network_before = copy.deepcopy(network)
 
-    # Запуск оптимізації МПО
-    print("\n\n" + "=" * 60)
-    print("ЗАПУСК ОПТИМІЗАЦІЇ")
-    print("=" * 60)
+    # Вибір режиму оптимізації
+    optimization_mode = display_optimization_mode_menu()
 
-    optimizer = CoordinateOptimizer(
-        network=network,
-        step_size=5.0,  # Збільшено для швидшого переміщення
-        max_iterations=100,  # Збільшено для повної оптимізації
-        tolerance=0.1
-    )
+    if not optimization_mode:
+        print("\nПрограму завершено")
+        return
 
-    # Виконуємо оптимізацію
-    results = optimizer.optimize(verbose=True)
+    # Виконуємо оптимізацію згідно обраного режиму
+    if optimization_mode == 'compare':
+        # Режим порівняння
+        comparison_results = run_comparison(network, initial_costs)
+        print_comparison_table(comparison_results)
 
-    # Виводимо оптимізовану мережу
-    print("\n" + "=" * 60)
-    print("СТАН МЕРЕЖІ ПІСЛЯ ОПТИМІЗАЦІЇ")
-    print("=" * 60)
-    network.print_network_state()
+        # Використовуємо результат МПО для візуалізації (як кращий)
+        network_after = comparison_results['mpo']['network']
+        final_costs = network_after.calculate_costs()
 
-    # Виводимо фінальні витрати
-    print("\n" + "=" * 60)
-    print("ФІНАЛЬНІ ВИТРАТИ")
-    print("=" * 60)
-    final_costs = network.calculate_costs()
-    network.cost_calculator.print_cost_breakdown(final_costs)
+    elif optimization_mode == 'mpo':
+        # Тільки МПО
+        print("\n\n" + "=" * 60)
+        print("ЗАПУСК ОПТИМІЗАЦІЇ: МПО")
+        print("=" * 60)
 
-    # Виводимо результати оптимізації
-    optimizer.print_results()
+        optimizer = CoordinateOptimizer(
+            network=network,
+            step_size=5.0,
+            max_iterations=100,
+            tolerance=0.1
+        )
 
-    # Візуалізація
+        results = optimizer.optimize(verbose=True)
+        optimizer.print_results()
+
+        network_after = network
+        final_costs = network.calculate_costs()
+
+    else:  # optimization_mode == 'ga'
+        # Тільки ЕМ-ГА
+        print("\n\n" + "=" * 60)
+        print("ЗАПУСК ОПТИМІЗАЦІЇ: ЕМ-ГА")
+        print("=" * 60)
+
+        optimizer = GeneticOptimizer(
+            network=network,
+            population_size=50,
+            generations=100,
+            mutation_rate=0.1,
+            crossover_rate=0.8
+        )
+
+        results = optimizer.optimize(verbose=True)
+        optimizer.print_results()
+
+        network_after = network
+        final_costs = network.calculate_costs()
+
+    # Візуалізація (для всіх режимів)
     print("\n" + "=" * 60)
     print("ГЕНЕРАЦІЯ ГРАФІКІВ")
     print("=" * 60)
@@ -186,17 +407,18 @@ def main():
     visualizer = NetworkVisualizer()
 
     # Порівняння мереж до/після
-    network_comparison_path = f'results/{file_basename}_network_comparison.png'
+    mode_suffix = {'mpo': 'mpo', 'ga': 'ga', 'compare': 'comparison'}[optimization_mode]
+    network_comparison_path = f'results/{file_basename}_{mode_suffix}_network_comparison.png'
     visualizer.compare_networks(
         network_before=network_before,
-        network_after=network,
+        network_after=network_after,
         costs_before=initial_costs,
         costs_after=final_costs,
         save_path=network_comparison_path
     )
 
     # Порівняння витрат
-    cost_comparison_path = f'results/{file_basename}_cost_comparison.png'
+    cost_comparison_path = f'results/{file_basename}_{mode_suffix}_cost_comparison.png'
     visualizer.plot_cost_comparison(
         costs_before=initial_costs,
         costs_after=final_costs,
@@ -204,7 +426,7 @@ def main():
     )
 
     print("\n" + "=" * 60)
-    print("MVP ЗАВЕРШЕНО: ОПТИМІЗАЦІЯ ТА ВІЗУАЛІЗАЦІЯ ПРАЦЮЮТЬ!")
+    print("ПРОГРАМУ ЗАВЕРШЕНО")
     print("=" * 60)
     print(f"\n✓ Результати збережено:")
     print(f"  - {network_comparison_path}")
