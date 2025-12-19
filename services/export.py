@@ -59,8 +59,10 @@ class ResultsExporter:
             results, network_before, network_after, execution_time
         )
 
-        # Запис у CSV
+        # Запис у CSV з підказкою для Excel про роздільник
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+            # Додаємо sep=, для Excel
+            f.write('sep=,\n')
             writer = csv.DictWriter(f, fieldnames=data_row.keys(), quoting=csv.QUOTE_MINIMAL)
             writer.writeheader()
             writer.writerow(data_row)
@@ -105,8 +107,10 @@ class ResultsExporter:
             ga_data['execution_time']
         )
 
-        # Запис у CSV
+        # Запис у CSV з підказкою для Excel про роздільник
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+            # Додаємо sep=, для Excel
+            f.write('sep=,\n')
             writer = csv.DictWriter(f, fieldnames=mpo_row.keys(), quoting=csv.QUOTE_MINIMAL)
             writer.writeheader()
             writer.writerow(mpo_row)
@@ -152,6 +156,9 @@ class ResultsExporter:
 
         # Додавання до файлу
         with open(filepath, 'a', newline='', encoding='utf-8-sig') as f:
+            # Якщо файл новий, додаємо sep=, для Excel
+            if not file_exists:
+                f.write('sep=,\n')
             writer = csv.DictWriter(f, fieldnames=data_row.keys(), quoting=csv.QUOTE_MINIMAL)
             if not file_exists:
                 writer.writeheader()
