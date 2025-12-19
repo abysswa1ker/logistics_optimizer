@@ -161,6 +161,7 @@ def run_comparison(network: LogisticsNetwork, initial_costs: dict):
         'final_cost': mpo_results['final_cost'],
         'absolute_improvement': mpo_results['absolute_improvement'],
         'percentage_improvement': mpo_results['percentage_improvement'],
+        'iterations': mpo_results.get('iterations', ''),
         'active_terminals': mpo_active_terminals,
         'execution_time': mpo_time,
         'network': network_mpo

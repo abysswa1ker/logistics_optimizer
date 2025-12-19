@@ -169,7 +169,10 @@ class CoordinateOptimizer(Optimizer):
             print(f"  - Фаза 2 (деактивація): {deactivation_iterations} перевірок")
             print(f"{'='*60}")
 
-        return self.get_improvement()
+        # Додаємо кількість ітерацій до результатів
+        results = self.get_improvement()
+        results['iterations'] = pass_number
+        return results
 
     def _get_possible_locations(self) -> List[Tuple[float, float]]:
         """

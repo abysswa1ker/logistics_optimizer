@@ -177,60 +177,27 @@ class ResultsExporter:
         active_before = sum(1 for t in network_before.terminals if t.is_active)
         active_after = sum(1 for t in network_after.terminals if t.is_active)
 
-        # Базові дані
+        # Визначення кількості ітерацій
+        if optimizer_type in ['МПО', 'mpo']:
+            # Для МПО - це кількість фактичних проходів
+            iterations = results.get('iterations', '')
+        else:
+            # Для ЕМ-ГА - це кількість поколінь
+            iterations = parameters.get('generations', '')
+
+        # Спрощена структура для дипломної роботи
         row = {
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'dataset_name': dataset_name,
-            'optimizer_type': optimizer_type,
-
-            # Результати
-            'initial_cost': results.get('initial_cost', 0),
-            'final_cost': results.get('final_cost', 0),
-            'absolute_improvement': results.get('absolute_improvement', 0),
-            'percentage_improvement': results.get('percentage_improvement', 0),
-            'execution_time_sec': execution_time,
-
-            # Конфігурація мережі
-            'terminals_count': len(network_before.terminals),
-            'consumers_count': len(network_before.consumers),
-            'active_terminals_before': active_before,
-            'active_terminals_after': active_after,
-            'terminals_deactivated': active_before - active_after,
+            'dataset': dataset_name,
+            'method': 'MPO' if optimizer_type in ['МПО', 'mpo'] else 'GA',
+            'initial_cost': round(results.get('initial_cost', 0), 2),
+            'final_cost': round(results.get('final_cost', 0), 2),
+            'improvement_abs': round(results.get('absolute_improvement', 0), 2),
+            'improvement_pct': round(results.get('percentage_improvement', 0), 2),
+            'terminals_before': active_before,
+            'terminals_after': active_after,
+            'execution_time': round(execution_time, 2),
+            'iterations': iterations,
         }
-
-        # Додавання параметрів оптимізації (залежно від типу)
-        if optimizer_type in ['МПО', 'mpo']:
-            row.update({
-                'mpo_step_size': parameters.get('step_size', ''),
-                'mpo_max_iterations': parameters.get('max_iterations', ''),
-                'mpo_tolerance': parameters.get('tolerance', ''),
-                'ga_population_size': '',
-                'ga_generations': '',
-                'ga_mutation_rate': '',
-                'ga_crossover_rate': '',
-            })
-        else:  # ЕМ-ГА
-            row.update({
-                'mpo_step_size': '',
-                'mpo_max_iterations': '',
-                'mpo_tolerance': '',
-                'ga_population_size': parameters.get('population_size', ''),
-                'ga_generations': parameters.get('generations', ''),
-                'ga_mutation_rate': parameters.get('mutation_rate', ''),
-                'ga_crossover_rate': parameters.get('crossover_rate', ''),
-            })
-
-        # Додавання детальної конфігурації терміналів
-        terminals_config_before = ';'.join([
-            f"T{t.id}:{'ON' if t.is_active else 'OFF'}@({t.x:.1f},{t.y:.1f})"
-            for t in network_before.terminals
-        ])
-        terminals_config_after = ';'.join([
-            f"T{t.id}:{'ON' if t.is_active else 'OFF'}@({t.x:.1f},{t.y:.1f})"
-            for t in network_after.terminals
-        ])
-
-        row['terminals_config_before'] = terminals_config_before
-        row['terminals_config_after'] = terminals_config_after
 
         return row
