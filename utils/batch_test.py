@@ -8,7 +8,8 @@ import os
 import copy
 
 # Додаємо батьківську директорію до шляху
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 from models.network import LogisticsNetwork
 from optimizers.coordinate import CoordinateOptimizer
@@ -125,12 +126,12 @@ def run_batch_tests():
 
     # Мережі для тестування
     test_networks = [
-        ('data/network_n15.csv', 15),
-        ('data/network_n20.csv', 20),
-        ('data/network_n25.csv', 25),
-        ('data/network_n30.csv', 30),
-        ('data/network_n35.csv', 35),
-        ('data/network_n40.csv', 40),
+        (os.path.join(PROJECT_ROOT, 'data', 'network_n15.csv'), 15),
+        (os.path.join(PROJECT_ROOT, 'data', 'network_n20.csv'), 20),
+        (os.path.join(PROJECT_ROOT, 'data', 'network_n25.csv'), 25),
+        (os.path.join(PROJECT_ROOT, 'data', 'network_n30.csv'), 30),
+        (os.path.join(PROJECT_ROOT, 'data', 'network_n35.csv'), 35),
+        (os.path.join(PROJECT_ROOT, 'data', 'network_n40.csv'), 40),
     ]
 
     all_results = []
@@ -229,10 +230,10 @@ def run_batch_tests():
     print("ЕКСПОРТ РЕЗУЛЬТАТІВ")
     print(f"{'=' * 80}")
 
-    exporter = ResultsExporter(export_dir="results/batch_tests")
+    exporter = ResultsExporter(export_dir=os.path.join(PROJECT_ROOT, "results", "batch_tests"))
 
     import csv
-    filepath = "results/batch_tests/performance_comparison.csv"
+    filepath = os.path.join(PROJECT_ROOT, "results", "batch_tests", "performance_comparison.csv")
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
 
     with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
