@@ -62,14 +62,19 @@ class NetworkVisualizer:
         ax.text(center.x, center.y - 5, f'DC', 
                ha='center', va='top', fontsize=10, fontweight='bold')
 
-        # Малюємо термінали
+        # Малюємо термінали з невеликим зсувом для уникнення перекриття зі споживачами
+        terminal_offset = 1.5  # Зсув для візуалізації
         for terminal in network.terminals:
+            # Візуальна позиція терміналу (зі зсувом вгору-ліво)
+            display_x = terminal.x - terminal_offset
+            display_y = terminal.y + terminal_offset
+
             if terminal.is_active:
                 color = self.colors['terminal_active']
                 label = 'Активний термінал'
                 marker = '^'
                 # Для заповнених маркерів додаємо рамку
-                ax.scatter(terminal.x, terminal.y, c=color, s=300,
+                ax.scatter(display_x, display_y, c=color, s=300,
                           marker=marker, label=label,
                           edgecolors='black', linewidths=1.5, zorder=4)
             else:
@@ -77,14 +82,14 @@ class NetworkVisualizer:
                 label = 'Неактивний термінал'
                 marker = 'x'
                 # Неактивні термінали: меншого розміру і напівпрозорі
-                ax.scatter(terminal.x, terminal.y, c=color, s=150,
+                ax.scatter(display_x, display_y, c=color, s=150,
                           marker=marker, label=label, linewidths=2,
                           alpha=0.4, zorder=2)
 
             status = "✓" if terminal.is_active else "✗"
             # Підписуємо тільки активні термінали (неактивні вже позначені сірим хрестиком)
             if terminal.is_active:
-                ax.text(terminal.x, terminal.y + 5, f'T{terminal.id} {status}',
+                ax.text(display_x, display_y + 5, f'T{terminal.id} {status}',
                        ha='center', va='bottom', fontsize=9, fontweight='bold')
 
         # Малюємо споживачів (вище неактивних терміналів)
@@ -125,19 +130,24 @@ class NetworkVisualizer:
             ax: Matplotlib axes
         """
         center = network.get_center()
+        terminal_offset = 1.5  # Той самий зсув як при малюванні терміналів
 
-        # З'єднання центр → активні термінали
+        # З'єднання центр → активні термінали (до візуальних позицій)
         for terminal in network.get_active_terminals():
-            ax.plot([center.x, terminal.x], [center.y, terminal.y],
-                   color=self.colors['connection'], linewidth=2, 
+            display_x = terminal.x - terminal_offset
+            display_y = terminal.y + terminal_offset
+            ax.plot([center.x, display_x], [center.y, display_y],
+                   color=self.colors['connection'], linewidth=2,
                    linestyle='-', alpha=0.4, zorder=1)
 
-        # З'єднання термінали → споживачі
+        # З'єднання термінали → споживачі (від візуальних позицій терміналів)
         for consumer in network.consumers:
             terminal = network.get_terminal_by_id(consumer.assigned_terminal)
             if terminal.is_active:
-                ax.plot([terminal.x, consumer.x], [terminal.y, consumer.y],
-                       color=self.colors['connection'], linewidth=0.5, 
+                display_x = terminal.x - terminal_offset
+                display_y = terminal.y + terminal_offset
+                ax.plot([display_x, consumer.x], [display_y, consumer.y],
+                       color=self.colors['connection'], linewidth=0.5,
                        linestyle='--', alpha=0.3, zorder=1)
 
     def compare_networks(self, network_before: LogisticsNetwork,
@@ -284,7 +294,7 @@ class NetworkVisualizer:
             costs_ga: Витрати після ЕМ-ГА
             save_path: Шлях для збереження графіка
         """
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig, ax = plt.subplots(figsize=(14, 8))
 
         # Дані для графіка
         methods = ['До оптимізації', 'Після МПО', 'Після ЕМ-ГА']
@@ -314,23 +324,34 @@ class NetworkVisualizer:
         saving_ga = costs_before['total_cost'] - costs_ga['total_cost']
         saving_ga_pct = (saving_ga / costs_before['total_cost']) * 100
 
-        # Стрілки економії
-        # МПО
-        ax.annotate('', xy=(1, costs_mpo['total_cost']), xytext=(0, costs_before['total_cost']),
-                   arrowprops=dict(arrowstyle='<->', color='#3498DB', lw=2.5))
-        ax.text(0.5, (costs_before['total_cost'] + costs_mpo['total_cost']) / 2,
-               f'Економія МПО:\n{saving_mpo:,.0f} грн\n({saving_mpo_pct:.1f}%)',
-               fontsize=11, color='#2C3E50', fontweight='bold',
-               ha='center', va='center',
+        # Стрілки економії - вертикальні збоку від кожного стовпчика
+        # МПО - стрілка праворуч від стовпчика
+        arrow_offset = 0.35  # Відступ від краю стовпчика
+        ax.annotate('', xy=(1 + arrow_offset, costs_mpo['total_cost']),
+                   xytext=(1 + arrow_offset, costs_before['total_cost']),
+                   arrowprops=dict(arrowstyle='<->', color='#3498DB', lw=3))
+
+        # Підпис для МПО - праворуч від стрілки
+        mpo_label_x = 1 + arrow_offset + 0.15
+        mpo_label_y = (costs_before['total_cost'] + costs_mpo['total_cost']) / 2
+        ax.text(mpo_label_x, mpo_label_y,
+               f'Економія:\n{saving_mpo:,.0f} грн\n({saving_mpo_pct:.1f}%)',
+               fontsize=10, color='#2C3E50', fontweight='bold',
+               ha='left', va='center',
                bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#3498DB', linewidth=2))
 
-        # ЕМ-ГА
-        ax.annotate('', xy=(2, costs_ga['total_cost']), xytext=(0, costs_before['total_cost']),
-                   arrowprops=dict(arrowstyle='<->', color='#27AE60', lw=2.5))
-        ax.text(1.0, (costs_before['total_cost'] + costs_ga['total_cost']) / 2 - (costs_before['total_cost'] * 0.05),
-               f'Економія ЕМ-ГА:\n{saving_ga:,.0f} грн\n({saving_ga_pct:.1f}%)',
-               fontsize=11, color='#2C3E50', fontweight='bold',
-               ha='center', va='center',
+        # ЕМ-ГА - стрілка праворуч від стовпчика
+        ax.annotate('', xy=(2 + arrow_offset, costs_ga['total_cost']),
+                   xytext=(2 + arrow_offset, costs_before['total_cost']),
+                   arrowprops=dict(arrowstyle='<->', color='#27AE60', lw=3))
+
+        # Підпис для ЕМ-ГА - праворуч від стрілки
+        ga_label_x = 2 + arrow_offset + 0.15
+        ga_label_y = (costs_before['total_cost'] + costs_ga['total_cost']) / 2
+        ax.text(ga_label_x, ga_label_y,
+               f'Економія:\n{saving_ga:,.0f} грн\n({saving_ga_pct:.1f}%)',
+               fontsize=10, color='#2C3E50', fontweight='bold',
+               ha='left', va='center',
                bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#27AE60', linewidth=2))
 
         # Визначення кращого методу
@@ -356,10 +377,13 @@ class NetworkVisualizer:
         ax.grid(axis='y', alpha=0.3, linestyle='--')
         ax.set_axisbelow(True)
 
-        # Встановлюємо межі осі Y для кращого відображення
+        # Встановлюємо межі осей для кращого відображення
         y_min = min(costs) * 0.85
         y_max = max(costs) * 1.15
         ax.set_ylim(y_min, y_max)
+
+        # Розширюємо межі по X щоб підписи не обрізалися
+        ax.set_xlim(-0.5, 3.2)
 
         plt.tight_layout()
 
