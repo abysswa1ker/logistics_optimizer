@@ -61,7 +61,7 @@ class ResultsExporter:
 
         # Запис у CSV
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=data_row.keys(), quoting=csv.QUOTE_ALL)
+            writer = csv.DictWriter(f, fieldnames=data_row.keys(), quoting=csv.QUOTE_MINIMAL)
             writer.writeheader()
             writer.writerow(data_row)
 
@@ -107,7 +107,7 @@ class ResultsExporter:
 
         # Запис у CSV
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=mpo_row.keys(), quoting=csv.QUOTE_ALL)
+            writer = csv.DictWriter(f, fieldnames=mpo_row.keys(), quoting=csv.QUOTE_MINIMAL)
             writer.writeheader()
             writer.writerow(mpo_row)
             writer.writerow(ga_row)
@@ -152,7 +152,7 @@ class ResultsExporter:
 
         # Додавання до файлу
         with open(filepath, 'a', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=data_row.keys(), quoting=csv.QUOTE_ALL)
+            writer = csv.DictWriter(f, fieldnames=data_row.keys(), quoting=csv.QUOTE_MINIMAL)
             if not file_exists:
                 writer.writeheader()
             writer.writerow(data_row)
