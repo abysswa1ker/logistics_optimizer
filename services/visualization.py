@@ -269,3 +269,104 @@ class NetworkVisualizer:
             print(f"\n📊 Графік витрат збережено: {save_path}")
 
         plt.show()
+
+    def plot_methods_comparison(self,
+                                costs_before: dict,
+                                costs_mpo: dict,
+                                costs_ga: dict,
+                                save_path: Optional[str] = None):
+        """
+        Малює порівняння результатів обох методів оптимізації
+
+        Args:
+            costs_before: Витрати до оптимізації
+            costs_mpo: Витрати після МПО
+            costs_ga: Витрати після ЕМ-ГА
+            save_path: Шлях для збереження графіка
+        """
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Дані для графіка
+        methods = ['До оптимізації', 'Після МПО', 'Після ЕМ-ГА']
+        costs = [
+            costs_before['total_cost'],
+            costs_mpo['total_cost'],
+            costs_ga['total_cost']
+        ]
+
+        # Кольори для стовпчиків
+        colors = ['#E74C3C', '#3498DB', '#27AE60']
+
+        # Створюємо стовпчикову діаграму
+        bars = ax.bar(methods, costs, color=colors, alpha=0.8, width=0.6, edgecolor='black', linewidth=1.5)
+
+        # Додаємо значення на стовпчиках
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{height:,.0f} грн',
+                   ha='center', va='bottom', fontsize=12, fontweight='bold')
+
+        # Розрахунок та відображення економії
+        saving_mpo = costs_before['total_cost'] - costs_mpo['total_cost']
+        saving_mpo_pct = (saving_mpo / costs_before['total_cost']) * 100
+
+        saving_ga = costs_before['total_cost'] - costs_ga['total_cost']
+        saving_ga_pct = (saving_ga / costs_before['total_cost']) * 100
+
+        # Стрілки економії
+        # МПО
+        ax.annotate('', xy=(1, costs_mpo['total_cost']), xytext=(0, costs_before['total_cost']),
+                   arrowprops=dict(arrowstyle='<->', color='#3498DB', lw=2.5))
+        ax.text(0.5, (costs_before['total_cost'] + costs_mpo['total_cost']) / 2,
+               f'Економія МПО:\n{saving_mpo:,.0f} грн\n({saving_mpo_pct:.1f}%)',
+               fontsize=11, color='#2C3E50', fontweight='bold',
+               ha='center', va='center',
+               bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#3498DB', linewidth=2))
+
+        # ЕМ-ГА
+        ax.annotate('', xy=(2, costs_ga['total_cost']), xytext=(0, costs_before['total_cost']),
+                   arrowprops=dict(arrowstyle='<->', color='#27AE60', lw=2.5))
+        ax.text(1.0, (costs_before['total_cost'] + costs_ga['total_cost']) / 2 - (costs_before['total_cost'] * 0.05),
+               f'Економія ЕМ-ГА:\n{saving_ga:,.0f} грн\n({saving_ga_pct:.1f}%)',
+               fontsize=11, color='#2C3E50', fontweight='bold',
+               ha='center', va='center',
+               bbox=dict(boxstyle='round,pad=0.5', facecolor='white', edgecolor='#27AE60', linewidth=2))
+
+        # Визначення кращого методу
+        if costs_mpo['total_cost'] < costs_ga['total_cost']:
+            winner = "МПО"
+            winner_color = '#3498DB'
+            advantage = costs_ga['total_cost'] - costs_mpo['total_cost']
+        else:
+            winner = "ЕМ-ГА"
+            winner_color = '#27AE60'
+            advantage = costs_mpo['total_cost'] - costs_ga['total_cost']
+
+        # Додаємо текст про переможця
+        ax.text(0.5, 0.95, f'🏆 Кращий результат: {winner} (перевага {advantage:,.0f} грн)',
+               transform=ax.transAxes,
+               fontsize=14, fontweight='bold', color=winner_color,
+               ha='center', va='top',
+               bbox=dict(boxstyle='round,pad=0.8', facecolor='#F8F9FA', edgecolor=winner_color, linewidth=3))
+
+        # Налаштування графіка
+        ax.set_ylabel('Загальні витрати (грн)', fontsize=13, fontweight='bold')
+        ax.set_title('ПОРІВНЯННЯ МЕТОДІВ ОПТИМІЗАЦІЇ', fontsize=16, fontweight='bold', pad=20)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        ax.set_axisbelow(True)
+
+        # Встановлюємо межі осі Y для кращого відображення
+        y_min = min(costs) * 0.85
+        y_max = max(costs) * 1.15
+        ax.set_ylim(y_min, y_max)
+
+        plt.tight_layout()
+
+        if save_path:
+            # Створюємо директорію якщо не існує
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"\n📊 Графік порівняння методів збережено: {save_path}")
+
+        plt.show()

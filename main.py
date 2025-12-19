@@ -12,6 +12,7 @@ from models.network import LogisticsNetwork
 from optimizers.coordinate import CoordinateOptimizer
 from optimizers.genetic import GeneticOptimizer
 from services.visualization import NetworkVisualizer
+from services.export import ResultsExporter
 
 
 def get_csv_files(data_dir: str = 'data') -> list:
@@ -375,6 +376,7 @@ def main():
         print("ЗАПУСК ОПТИМІЗАЦІЇ: МПО")
         print("=" * 60)
 
+        start_time = time.time()
         optimizer = CoordinateOptimizer(
             network=network,
             step_size=5.0,
@@ -383,11 +385,20 @@ def main():
         )
 
         results = optimizer.optimize(verbose=True)
+        execution_time = time.time() - start_time
         optimizer.print_results()
 
         network_after = network
         final_costs = network.calculate_costs()
         optimizer_name = "МПО"
+
+        # Зберігаємо параметри та результати для експорту
+        mpo_parameters = {
+            'step_size': 5.0,
+            'max_iterations': 100,
+            'tolerance': 0.1
+        }
+        mpo_results = results
 
     else:  # optimization_mode == 'ga'
         # Тільки ЕМ-ГА
@@ -395,6 +406,7 @@ def main():
         print("ЗАПУСК ОПТИМІЗАЦІЇ: ЕМ-ГА")
         print("=" * 60)
 
+        start_time = time.time()
         optimizer = GeneticOptimizer(
             network=network,
             population_size=50,
@@ -404,11 +416,21 @@ def main():
         )
 
         results = optimizer.optimize(verbose=True)
+        execution_time = time.time() - start_time
         optimizer.print_results()
 
         network_after = network
         final_costs = network.calculate_costs()
         optimizer_name = "ЕМ-ГА"
+
+        # Зберігаємо параметри та результати для експорту
+        ga_parameters = {
+            'population_size': 50,
+            'generations': 100,
+            'mutation_rate': 0.1,
+            'crossover_rate': 0.8
+        }
+        ga_results = results
 
     # Візуалізація (для всіх режимів)
     print("\n" + "=" * 60)
@@ -437,12 +459,94 @@ def main():
         save_path=cost_comparison_path
     )
 
+    # Додатковий графік порівняння методів (тільки для режиму порівняння)
+    methods_comparison_path = None
+    if optimization_mode == 'compare':
+        methods_comparison_path = f'results/{file_basename}_methods_comparison.png'
+        costs_mpo = comparison_results['mpo']['network'].calculate_costs()
+        costs_ga = comparison_results['ga']['network'].calculate_costs()
+        visualizer.plot_methods_comparison(
+            costs_before=initial_costs,
+            costs_mpo=costs_mpo,
+            costs_ga=costs_ga,
+            save_path=methods_comparison_path
+        )
+
+    # Експорт результатів
+    print("\n" + "=" * 60)
+    print("ЕКСПОРТ РЕЗУЛЬТАТІВ")
+    print("=" * 60)
+
+    exporter = ResultsExporter()
+
+    if optimization_mode == 'compare':
+        # Експорт порівняння
+        mpo_export_data = {
+            'parameters': {
+                'step_size': 5.0,
+                'max_iterations': 100,
+                'tolerance': 0.1
+            },
+            'results': comparison_results['mpo'],
+            'network': comparison_results['mpo']['network'],
+            'execution_time': comparison_results['mpo']['execution_time']
+        }
+
+        ga_export_data = {
+            'parameters': {
+                'population_size': 50,
+                'generations': 100,
+                'mutation_rate': 0.1,
+                'crossover_rate': 0.8
+            },
+            'results': comparison_results['ga'],
+            'network': comparison_results['ga']['network'],
+            'execution_time': comparison_results['ga']['execution_time']
+        }
+
+        export_path = exporter.export_comparison(
+            dataset_name=file_basename,
+            mpo_data=mpo_export_data,
+            ga_data=ga_export_data,
+            network_before=network_before
+        )
+        print(f"✓ Порівняльні результати експортовано: {export_path}")
+
+    elif optimization_mode == 'mpo':
+        # Експорт МПО
+        export_path = exporter.export_single_optimization(
+            dataset_name=file_basename,
+            optimizer_type='МПО',
+            parameters=mpo_parameters,
+            results=mpo_results,
+            network_before=network_before,
+            network_after=network_after,
+            execution_time=execution_time
+        )
+        print(f"✓ Результати МПО експортовано: {export_path}")
+
+    else:  # ga
+        # Експорт ЕМ-ГА
+        export_path = exporter.export_single_optimization(
+            dataset_name=file_basename,
+            optimizer_type='ЕМ-ГА',
+            parameters=ga_parameters,
+            results=ga_results,
+            network_before=network_before,
+            network_after=network_after,
+            execution_time=execution_time
+        )
+        print(f"✓ Результати ЕМ-ГА експортовано: {export_path}")
+
     print("\n" + "=" * 60)
     print("ПРОГРАМУ ЗАВЕРШЕНО")
     print("=" * 60)
     print(f"\n✓ Результати збережено:")
     print(f"  - {network_comparison_path}")
     print(f"  - {cost_comparison_path}")
+    if methods_comparison_path:
+        print(f"  - {methods_comparison_path}")
+    print(f"  - {export_path}")
     print("=" * 60)
 
 
