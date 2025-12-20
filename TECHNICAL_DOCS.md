@@ -395,6 +395,445 @@ F(x) = Σ(fixed_costs) + Σ(processing_costs) + Σ(transport_costs)
 
 ---
 
+### Еволюційно-модифікований генетичний алгоритм (ЕМ-ГА)
+
+**Файл:** `optimizers/genetic.py`
+
+**Реалізація:** Генетичний алгоритм з бінарним кодуванням для задачі p-median
+
+#### Клас GeneticOptimizer
+
+```python
+class GeneticOptimizer(Optimizer):
+    population_size: int      # Розмір популяції (default: 50)
+    generations: int          # Кількість поколінь (default: 100)
+    mutation_rate: float      # Ймовірність мутації (default: 0.1)
+    crossover_rate: float     # Ймовірність кросоверу (default: 0.8)
+    current_generation: int   # Поточне покоління
+    best_fitness_history: list  # Історія найкращого fitness
+```
+
+#### Кодування рішення (Хромосома)
+
+**Бінарне представлення:**
+```
+Хромосома = [b₁, b₂, b₃, ..., bₙ]
+
+де bᵢ ∈ {0, 1}:
+  1 = термінал i активний
+  0 = термінал i неактивний
+```
+
+**Приклад:**
+```python
+# 5 терміналів в мережі
+chromosome = [1, 0, 1, 1, 0]
+# Означає: термінали 0, 2, 3 активні
+#          термінали 1, 4 неактивні
+```
+
+**Обмеження:**
+- Мінімум 1 активний термінал (інакше invalid)
+- Всі біти 0 → invalid хромосома
+
+#### Псевдокод алгоритму
+
+```
+function GENETIC_OPTIMIZE():
+    // Ініціалізація
+    population = initialize_population(population_size)
+    evaluate_fitness(population)
+
+    for generation in 1..generations:
+        new_population = []
+
+        // Елітизм - зберігаємо кращі рішення
+        elite = select_best(population, elite_size=2)
+        new_population.add(elite)
+
+        // Генерація нового покоління
+        while size(new_population) < population_size:
+            // Селекція батьків
+            parent1 = tournament_selection(population)
+            parent2 = tournament_selection(population)
+
+            // Кросовер
+            if random() < crossover_rate:
+                child1, child2 = crossover(parent1, parent2)
+            else:
+                child1, child2 = parent1.copy(), parent2.copy()
+
+            // Мутація
+            if random() < mutation_rate:
+                mutate(child1)
+            if random() < mutation_rate:
+                mutate(child2)
+
+            // Додаємо дітей до нової популяції
+            new_population.add(child1, child2)
+
+        population = new_population
+        evaluate_fitness(population)
+
+        // Збереження прогресу
+        best = get_best(population)
+        best_fitness_history.append(best.fitness)
+
+        // Рання зупинка
+        if no_improvement_for(10_generations):
+            break
+
+    // Повернення найкращого рішення
+    best_solution = get_best(population)
+    apply_solution_to_network(best_solution)
+    return results
+```
+
+#### Генетичні оператори
+
+##### 1. Ініціалізація популяції
+
+```python
+def _initialize_population(self) -> List[List[int]]:
+    """
+    Створює початкову популяцію випадкових рішень
+
+    Стратегія:
+    1. Кожна хромосома = випадкова комбінація бітів
+    2. Перевірка валідності (мінімум 1 активний термінал)
+    3. Гарантуємо різноманітність (не дублюємо хромосоми)
+
+    Returns:
+        Список хромосом (кожна = список int 0/1)
+    """
+    population = []
+    n_terminals = len(self.network.terminals)
+
+    for _ in range(self.population_size):
+        # Випадкова хромосома
+        chromosome = [random.choice([0, 1])
+                     for _ in range(n_terminals)]
+
+        # Гарантуємо мінімум 1 активний термінал
+        if sum(chromosome) == 0:
+            chromosome[random.randint(0, n_terminals-1)] = 1
+
+        population.append(chromosome)
+
+    return population
+```
+
+**Складність:** O(P × N), де P = population_size, N = кількість терміналів
+
+##### 2. Функція пристосованості (Fitness)
+
+```python
+def _evaluate_fitness(self, chromosome: List[int]) -> float:
+    """
+    Обчислює fitness хромосоми
+
+    Fitness = -total_cost  (мінімізація → максимізація)
+
+    Алгоритм:
+    1. Застосувати хромосому до мережі (активувати/деактивувати термінали)
+    2. Перерозподілити споживачів до активних терміналів
+    3. Обчислити загальні витрати
+    4. Fitness = -cost (щоб максимізувати fitness)
+
+    Args:
+        chromosome: Бінарний вектор стану терміналів
+
+    Returns:
+        Fitness значення (більше = краще)
+    """
+    # Застосувати хромосому
+    for i, terminal in enumerate(self.network.terminals):
+        terminal.is_active = (chromosome[i] == 1)
+
+    # Перерозподілити споживачів
+    self.network.assign_consumers_to_terminals()
+
+    # Обчислити вартість
+    costs = self.network.calculate_costs()
+    total_cost = costs['total_cost']
+
+    # Fitness = -cost (інвертуємо для максимізації)
+    fitness = -total_cost
+
+    return fitness
+```
+
+**Важливо:**
+- Більший fitness = краще рішення
+- Fitness негативний (бо cost позитивний)
+- Найкращий fitness = найменша вартість
+
+##### 3. Селекція (Tournament Selection)
+
+```python
+def _tournament_selection(self, population: List,
+                         fitnesses: List[float],
+                         tournament_size: int = 3) -> List[int]:
+    """
+    Турнірна селекція батьків
+
+    Алгоритм:
+    1. Випадково обрати tournament_size особин
+    2. Порівняти їх fitness
+    3. Повернути найкращу
+
+    Переваги:
+    - Зберігає різноманітність
+    - Уникає передчасної збіжності
+    - Швидка (не потрібно сортувати всю популяцію)
+
+    Args:
+        population: Список хромосом
+        fitnesses: Список fitness значень
+        tournament_size: Розмір турніру (зазвичай 2-5)
+
+    Returns:
+        Переможець турніру (хромосома)
+    """
+    # Випадковий вибір учасників турніру
+    tournament_indices = random.sample(
+        range(len(population)),
+        tournament_size
+    )
+
+    # Знаходимо найкращого
+    best_idx = max(tournament_indices,
+                   key=lambda i: fitnesses[i])
+
+    return population[best_idx].copy()
+```
+
+**Параметри:**
+- `tournament_size=2`: слабкий селекційний тиск, більше різноманітності
+- `tournament_size=5`: сильний тиск, швидша збіжність
+
+##### 4. Кросовер (Одноточковий)
+
+```python
+def _crossover(self, parent1: List[int],
+              parent2: List[int]) -> Tuple[List[int], List[int]]:
+    """
+    Одноточковий кросовер
+
+    Алгоритм:
+    1. Обрати випадкову точку розрізу
+    2. Обміняти хвости між батьками
+    3. Перевірити валідність дітей
+
+    Приклад:
+        parent1 = [1, 0, 1, 1, 0]
+        parent2 = [0, 1, 0, 1, 1]
+        point   =        ↑ (позиція 2)
+
+        child1  = [1, 0 | 0, 1, 1]  # голова P1 + хвіст P2
+        child2  = [0, 1 | 1, 1, 0]  # голова P2 + хвіст P1
+
+    Args:
+        parent1, parent2: Батьківські хромосоми
+
+    Returns:
+        (child1, child2): Два нащадки
+    """
+    n = len(parent1)
+
+    # Випадкова точка розрізу (не на краях)
+    point = random.randint(1, n - 1)
+
+    # Створюємо нащадків
+    child1 = parent1[:point] + parent2[point:]
+    child2 = parent2[:point] + parent1[point:]
+
+    # Гарантуємо валідність (мінімум 1 активний)
+    if sum(child1) == 0:
+        child1[random.randint(0, n-1)] = 1
+    if sum(child2) == 0:
+        child2[random.randint(0, n-1)] = 1
+
+    return child1, child2
+```
+
+**Альтернативи:**
+- Двоточковий кросовер
+- Uniform crossover
+- Arithmetic crossover (для дійсних чисел)
+
+##### 5. Мутація (Bit Flip)
+
+```python
+def _mutate(self, chromosome: List[int]) -> None:
+    """
+    Бітова мутація (flip)
+
+    Алгоритм:
+    1. Для кожного біта з ймовірністю mutation_rate:
+       - Інвертувати: 0→1 або 1→0
+    2. Перевірити валідність результату
+
+    Приклад (mutation_rate = 0.1):
+        before = [1, 0, 1, 1, 0]
+                      ↑ (мутація тут)
+        after  = [1, 1, 1, 1, 0]
+
+    Важливість:
+    - Додає нову генетичну інформацію
+    - Запобігає передчасній збіжності
+    - Дозволяє вийти з локальних мінімумів
+
+    Args:
+        chromosome: Хромосома для мутації (змінюється in-place)
+    """
+    n = len(chromosome)
+
+    for i in range(n):
+        if random.random() < self.mutation_rate:
+            # Інвертуємо біт
+            chromosome[i] = 1 - chromosome[i]
+
+    # Гарантуємо валідність
+    if sum(chromosome) == 0:
+        chromosome[random.randint(0, n-1)] = 1
+```
+
+**Рекомендовані значення mutation_rate:**
+- Мала мережа: 0.05-0.1
+- Середня: 0.1
+- Велика: 0.1-0.15
+
+#### Елітизм
+
+```python
+# В основному циклі:
+elite_size = 2  # Зберігаємо 2 найкращі рішення
+
+# Селекція еліти
+elite = sorted(population,
+              key=lambda c: fitnesses[population.index(c)],
+              reverse=True)[:elite_size]
+
+# Еліта завжди переходить в нове покоління
+new_population = elite.copy()
+```
+
+**Переваги:**
+- Гарантує монотонність (не погіршуємо найкраще рішення)
+- Прискорює збіжність
+- Зберігає хороші рішення від випадкового знищення
+
+**Недоліки:**
+- Може призвести до передчасної збіжності
+- Зменшує різноманітність
+
+#### Складність алгоритму
+
+**Часова складність одного покоління:**
+```
+O(P × N × C)
+
+де:
+  P = population_size (розмір популяції)
+  N = кількість терміналів
+  C = кількість споживачів
+```
+
+**Загальна складність:**
+```
+O(G × P × N × C)
+
+де:
+  G = generations (кількість поколінь)
+```
+
+**Порівняння з МПО:**
+- МПО: O(P_mpo × L × N × C), де L ≈ 400 (кількість локацій)
+- ЕМ-ГА: O(G × P_ga × N × C)
+
+**При типових параметрах:**
+- МПО: 5 × 400 × 10 × 30 = 600,000 операцій
+- ЕМ-ГА: 50 × 100 × 10 × 30 = 1,500,000 операцій
+
+**Але:** ЕМ-ГА часто збігається раніше (рання зупинка), і операції дешевші (немає переміщень, тільки зміна біта)
+
+#### Умови зупинки
+
+```python
+# 1. Досягнуто максимум поколінь
+if generation >= self.generations:
+    break
+
+# 2. Немає покращення N поколінь підряд
+patience = 10
+if len(best_fitness_history) > patience:
+    recent = best_fitness_history[-patience:]
+    if len(set(recent)) == 1:  # Всі однакові
+        print(f"Рання зупинка на поколінні {generation}")
+        break
+
+# 3. Досягнуто цільового fitness (якщо відомий оптимум)
+if best_fitness >= target_fitness:
+    break
+```
+
+#### Переваги ЕМ-ГА
+
+1. **Глобальний пошук**
+   - Популяція досліджує багато точок простору одночасно
+   - Кросовер комбінує хороші риси різних рішень
+   - Мутація дозволяє вийти з локальних мінімумів
+
+2. **Паралелізованість**
+   - Fitness можна обчислювати паралельно для всієї популяції
+   - Незалежні обчислення для різних хромосом
+
+3. **Масштабованість**
+   - Час зростає лінійно з розміром мережі O(n)
+   - МПО зростає квадратично через сітку локацій O(n²)
+
+4. **Робастність**
+   - Не застряє в локальних мінімумах
+   - Добре працює на складних топологіях
+   - Адаптивність через селекційний тиск
+
+#### Недоліки ЕМ-ГА
+
+1. **Стохастичність**
+   - Різні результати при кожному запуску
+   - Потрібно кілька запусків для статистики
+
+2. **Налаштування параметрів**
+   - Багато параметрів (population, generations, rates)
+   - Оптимальні значення залежать від задачі
+
+3. **Немає гарантій оптимальності**
+   - Евристичний метод
+   - Може не знайти глобальний оптимум
+
+4. **Витрати пам'яті**
+   - Зберігає всю популяцію (P хромосом)
+   - МПО зберігає тільки поточне рішення
+
+#### Порівняння МПО vs ЕМ-ГА
+
+| Характеристика | МПО | ЕМ-ГА |
+|----------------|-----|-------|
+| Тип пошуку | Локальний | Глобальний |
+| Детермінізм | Так | Ні |
+| Швидкість (n<25) | Швидше | Повільніше |
+| Швидкість (n>30) | Повільніше | Швидше |
+| Якість рішення | Локальний оптимум | Часто краще |
+| Складність | O(L×N×C×P) | O(G×Pop×N×C) |
+| Налаштування | 2 параметри | 4+ параметри |
+| Паралелізація | Складно | Легко |
+| Пам'ять | O(N) | O(Pop×N) |
+
+**Висновок:** ЕМ-ГА краще для великих складних мереж, МПО - для малих та середніх з потребою відтворюваності.
+
+---
+
 ## Візуалізація
 
 ### Клас NetworkVisualizer (`services/visualization.py`)
