@@ -1,0 +1,463 @@
+3.3 Алгоритми основних модулів програми
+
+Програмний комплекс оптимізації логістичних мереж реалізує кілька ключових алгоритмів, які забезпечують функціонування системи. В цьому розділі детально описано математичні основи та особливості реалізації кожного з алгоритмів.
+
+3.3.1 Алгоритм обчислення цільової функції
+
+Цільова функція вартості логістичної мережі є центральним елементом задачі оптимізації. Загальна вартість мережі C_total складається з трьох компонент [1]:
+
+    C_total = C_fixed + C_processing + C_transport
+
+де:
+- C_fixed - сумарні фіксовані витрати на утримання активних терміналів
+- C_processing - витрати на обробку товарів у терміналах
+- C_transport - транспортні витрати доставки від центру через термінали до споживачів
+
+Фіксовані витрати обчислюються як сума вартостей всіх активних терміналів:
+
+    C_fixed = Σ(f_j × a_j), j ∈ T
+
+де f_j - фіксована вартість j-го терміналу, a_j ∈ {0,1} - індикатор активності терміналу, T - множина всіх терміналів [2].
+
+Витрати на обробку визначаються обсягом товарів, що проходять через кожен термінал:
+
+    C_processing = Σ(p_j × Q_j), j ∈ T_active
+
+де p_j - вартість обробки одиниці товару в j-му терміналі, Q_j - загальний обсяг товарів, що обробляється в цьому терміналі [3].
+
+Транспортні витрати включають доставку від центру до терміналів та від терміналів до споживачів:
+
+    C_transport = Σ(c × d(C,T_j) × Q_j) + Σ Σ(c × d(T_j,S_i) × q_i)
+
+де c - вартість перевезення одиниці товару на одиницю відстані, d(A,B) - відстань між точками A та B, C - центр, T_j - j-й термінал, S_i - i-й споживач, q_i - попит i-го споживача [4].
+
+Алгоритм обчислення реалізовано у модулі CostCalculator:
+
+```
+АЛГОРИТМ: CalculateTotalCost(network)
+ВХІД: network - логістична мережа з елементами
+ВИХІД: total_cost - загальна вартість мережі
+
+1. fixed_cost ← 0
+2. processing_cost ← 0
+3. transport_cost ← 0
+
+4. ДЛЯ КОЖНОГО terminal В network.terminals:
+5.     ЯКЩО terminal.active = TRUE ТОДІ
+6.         fixed_cost ← fixed_cost + terminal.fixed_cost
+7.
+8.         assigned_consumers ← GetAssignedConsumers(terminal)
+9.         terminal_volume ← 0
+10.
+11.        ДЛЯ КОЖНОГО consumer В assigned_consumers:
+12.            terminal_volume ← terminal_volume + consumer.demand
+13.            distance ← EuclideanDistance(terminal, consumer)
+14.            transport_cost ← transport_cost + TRANSPORT_RATE × distance × consumer.demand
+15.        КІНЕЦЬ ДЛЯ
+16.
+17.        processing_cost ← processing_cost + terminal.processing_cost × terminal_volume
+18.
+19.        center_distance ← EuclideanDistance(network.center, terminal)
+20.        transport_cost ← transport_cost + TRANSPORT_RATE × center_distance × terminal_volume
+21.    КІНЕЦЬ ЯКЩО
+22. КІНЕЦЬ ДЛЯ
+
+23. total_cost ← fixed_cost + processing_cost + transport_cost
+24. ПОВЕРНУТИ total_cost
+```
+
+Складність алгоритму становить O(N × C), де N - кількість терміналів, C - кількість споживачів [5].
+
+3.3.2 Алгоритм призначення споживачів до терміналів
+
+Кожен споживач обслуговується найближчим активним терміналом за евклідовою метрикою [6]. Це відповідає принципу мінімізації транспортних витрат при фіксованій конфігурації терміналів.
+
+Евклідова відстань між точками A(x_A, y_A) та B(x_B, y_B) обчислюється за формулою:
+
+    d(A,B) = √[(x_B - x_A)² + (y_B - y_A)²]
+
+Для підвищення продуктивності використано векторизовані операції бібліотеки NumPy [7]:
+
+```
+АЛГОРИТМ: AssignConsumersToTerminals(network)
+ВХІД: network - логістична мережа
+ВИХІД: assignments - словник призначень {consumer_id: terminal_id}
+
+1. assignments ← {}
+2. active_terminals ← GetActiveTerminals(network)
+
+3. ЯКЩО active_terminals.length = 0 ТОДІ
+4.     ПОВЕРНУТИ {} // Немає активних терміналів
+5. КІНЕЦЬ ЯКЩО
+
+6. ДЛЯ КОЖНОГО consumer В network.consumers:
+7.     min_distance ← ∞
+8.     best_terminal ← NULL
+9.
+10.    ДЛЯ КОЖНОГО terminal В active_terminals:
+11.        distance ← EuclideanDistance(consumer, terminal)
+12.        ЯКЩО distance < min_distance ТОДІ
+13.            min_distance ← distance
+14.            best_terminal ← terminal
+15.        КІНЕЦЬ ЯКЩО
+16.    КІНЕЦЬ ДЛЯ
+17.
+18.    assignments[consumer.id] ← best_terminal.id
+19. КІНЕЦЬ ДЛЯ
+
+20. ПОВЕРНУТИ assignments
+```
+
+Часова складність алгоритму: O(C × N), де C - кількість споживачів, N - кількість активних терміналів. Це є оптимальним рішенням для задачі nearest neighbor search в двовимірному просторі при невеликих розмірах мережі [8].
+
+3.3.3 Алгоритм методу покоординатного спуску (МПО)
+
+Метод покоординатного спуску є ітеративним алгоритмом локальної оптимізації, який послідовно оптимізує координати кожного терміналу окремо [9]. Алгоритм гарантує монотонне зменшення цільової функції на кожній ітерації.
+
+Основна ідея полягає в пошуку оптимальних координат для кожного терміналу при фіксованих координатах інших терміналів [10]:
+
+    (x_j*, y_j*) = argmin C_total(x_j, y_j | x_k, y_k для k ≠ j)
+
+Оптимальні координати j-го терміналу визначаються як центр мас призначених до нього споживачів, зважений за обсягами попиту [11]:
+
+    x_j* = Σ(q_i × x_i) / Σq_i
+    y_j* = Σ(q_i × y_i) / Σq_i
+
+де сумування ведеться по всіх споживачах i, призначених до терміналу j.
+
+Детальний алгоритм МПО:
+
+```
+АЛГОРИТМ: CoordinateDescentOptimization(network, max_iterations, tolerance)
+ВХІД:
+    network - початкова логістична мережа
+    max_iterations - максимальна кількість ітерацій
+    tolerance - мінімальне відносне покращення (%)
+ВИХІД:
+    optimized_network - оптимізована мережа
+    history - історія оптимізації
+
+1. current_cost ← CalculateTotalCost(network)
+2. history ← [current_cost]
+3. iteration ← 0
+
+4. ПОВТОРЮВАТИ:
+5.     iteration ← iteration + 1
+6.     improved ← FALSE
+7.
+8.     // Оптимізація координат терміналів
+9.     ДЛЯ КОЖНОГО terminal В network.terminals:
+10.        ЯКЩО terminal.active = FALSE ТОДІ
+11.            ПРОДОВЖИТИ // Пропустити неактивний термінал
+12.        КІНЕЦЬ ЯКЩО
+13.
+14.        assigned_consumers ← GetAssignedConsumers(terminal)
+15.
+16.        ЯКЩО assigned_consumers.length = 0 ТОДІ
+17.            terminal.active ← FALSE // Вимкнути термінал без споживачів
+18.            ПРОДОВЖИТИ
+19.        КІНЕЦЬ ЯКЩО
+20.
+21.        // Обчислення центру мас
+22.        total_demand ← 0
+23.        weighted_x ← 0
+24.        weighted_y ← 0
+25.
+26.        ДЛЯ КОЖНОГО consumer В assigned_consumers:
+27.            total_demand ← total_demand + consumer.demand
+28.            weighted_x ← weighted_x + consumer.x × consumer.demand
+29.            weighted_y ← weighted_y + consumer.y × consumer.demand
+30.        КІНЕЦЬ ДЛЯ
+31.
+32.        terminal.x ← weighted_x / total_demand
+33.        terminal.y ← weighted_y / total_demand
+34.    КІНЕЦЬ ДЛЯ
+35.
+36.    // Перевірка доцільності кожного терміналу
+37.    ДЛЯ КОЖНОГО terminal В network.terminals:
+38.        ЯКЩО terminal.active = TRUE ТОДІ
+39.            cost_with ← CalculateTotalCost(network)
+40.            terminal.active ← FALSE
+41.            cost_without ← CalculateTotalCost(network)
+42.
+43.            ЯКЩО cost_with < cost_without ТОДІ
+44.                terminal.active ← TRUE // Повернути термінал
+45.            КІНЕЦЬ ЯКЩО
+46.        КІНЕЦЬ ЯКЩО
+47.    КІНЕЦЬ ДЛЯ
+48.
+49.    // Перерахунок призначень та вартості
+50.    AssignConsumersToTerminals(network)
+51.    new_cost ← CalculateTotalCost(network)
+52.
+53.    improvement ← ((current_cost - new_cost) / current_cost) × 100
+54.
+55.    ЯКЩО improvement > tolerance ТОДІ
+56.        improved ← TRUE
+57.        current_cost ← new_cost
+58.        history.append(new_cost)
+59.    КІНЕЦЬ ЯКЩО
+60.
+61. ПОКИ improved = TRUE ТА iteration < max_iterations
+
+62. ПОВЕРНУТИ network, history
+```
+
+Складність одної ітерації алгоритму: O(N² × C), де N - кількість терміналів, C - кількість споживачів. В найгіршому випадку алгоритм виконує O(max_iterations) ітерацій, що дає загальну складність O(max_iterations × N² × C) [12].
+
+Збіжність алгоритму гарантована через монотонне зменшення цільової функції, яка обмежена знизу нулем [13].
+
+3.3.4 Алгоритм еволюційно-модифікованого генетичного алгоритму (ЕМ-ГА)
+
+Генетичний алгоритм реалізує глобальний стохастичний пошук оптимуму в просторі бінарних векторів активності терміналів [14]. На відміну від МПО, координати терміналів залишаються фіксованими, а оптимізується лише вибір активних терміналів.
+
+Кодування розв'язку: кожна особина популяції представлена бінарним вектором довжини N:
+
+    chromosome = [a_1, a_2, ..., a_N], де a_j ∈ {0, 1}
+
+де a_j = 1 означає, що j-й термінал активний, a_j = 0 - неактивний [15].
+
+Функція пристосованості (fitness) визначається як обернена величина вартості мережі [16]:
+
+    fitness(chromosome) = 1 / (C_total(chromosome) + ε)
+
+де ε = 1 - мала константа для уникнення ділення на нуль.
+
+Детальний алгоритм ЕМ-ГА:
+
+```
+АЛГОРИТМ: GeneticAlgorithmOptimization(network, population_size, generations, mutation_rate, crossover_rate)
+ВХІД:
+    network - початкова мережа
+    population_size - розмір популяції
+    generations - кількість поколінь
+    mutation_rate - ймовірність мутації
+    crossover_rate - ймовірність схрещування
+ВИХІД:
+    best_network - найкраща знайдена мережа
+    history - історія еволюції
+
+1. // Ініціалізація популяції
+2. population ← []
+3. N ← network.terminals.length
+4.
+5. ДЛЯ i ← 1 ДО population_size:
+6.     chromosome ← GenerateRandomBinary(N)
+7.     // Гарантуємо хоча б один активний термінал
+8.     ЯКЩО Sum(chromosome) = 0 ТОДІ
+9.         chromosome[RandomIndex()] ← 1
+10.    КІНЕЦЬ ЯКЩО
+11.    population.append(chromosome)
+12. КІНЕЦЬ ДЛЯ
+13.
+14. // Обчислення початкової пристосованості
+15. fitness_scores ← EvaluatePopulation(population, network)
+16. best_chromosome ← GetBest(population, fitness_scores)
+17. best_cost ← EvaluateChromosome(best_chromosome, network)
+18. history ← [best_cost]
+19.
+20. // Еволюційний цикл
+21. ДЛЯ generation ← 1 ДО generations:
+22.     new_population ← []
+23.
+24.     // Елітизм: зберігаємо 2 найкращі розв'язки
+25.     elite ← SelectTopK(population, fitness_scores, k=2)
+26.     new_population.extend(elite)
+27.
+28.     // Генерація нової популяції
+29.     ПОКИ new_population.length < population_size:
+30.         // Селекція: турнірний відбір
+31.         parent1 ← TournamentSelection(population, fitness_scores, tournament_size=3)
+32.         parent2 ← TournamentSelection(population, fitness_scores, tournament_size=3)
+33.
+34.         // Схрещування
+35.         ЯКЩО Random(0,1) < crossover_rate ТОДІ
+36.             child1, child2 ← SinglePointCrossover(parent1, parent2)
+37.         ІНАКШЕ
+38.             child1 ← parent1.copy()
+39.             child2 ← parent2.copy()
+40.         КІНЕЦЬ ЯКЩО
+41.
+42.         // Мутація
+43.         ЯКЩО Random(0,1) < mutation_rate ТОДІ
+44.             child1 ← BitFlipMutation(child1)
+45.         КІНЕЦЬ ЯКЩО
+46.         ЯКЩО Random(0,1) < mutation_rate ТОДІ
+47.             child2 ← BitFlipMutation(child2)
+48.         КІНЕЦЬ ЯКЩО
+49.
+50.         // Перевірка валідності (хоча б один активний термінал)
+51.         ЯКЩО Sum(child1) = 0 ТОДІ child1[RandomIndex()] ← 1
+52.         ЯКЩО Sum(child2) = 0 ТОДІ child2[RandomIndex()] ← 1
+53.
+54.         new_population.append(child1)
+55.         ЯКЩО new_population.length < population_size ТОДІ
+56.             new_population.append(child2)
+57.         КІНЕЦЬ ЯКЩО
+58.     КІНЕЦЬ ПОКИ
+59.
+60.     // Оновлення популяції
+61.     population ← new_population
+62.     fitness_scores ← EvaluatePopulation(population, network)
+63.
+64.     // Оновлення найкращого розв'язку
+65.     current_best ← GetBest(population, fitness_scores)
+66.     current_cost ← EvaluateChromosome(current_best, network)
+67.
+68.     ЯКЩО current_cost < best_cost ТОДІ
+69.         best_chromosome ← current_best
+70.         best_cost ← current_cost
+71.     КІНЕЦЬ ЯКЩО
+72.
+73.     history.append(best_cost)
+74. КІНЕЦЬ ДЛЯ
+75.
+76. // Застосування найкращого розв'язку до мережі
+77. ApplyChromosome(network, best_chromosome)
+78.
+79. ПОВЕРНУТИ network, history
+```
+
+Допоміжні функції генетичного алгоритму:
+
+```
+ФУНКЦІЯ: TournamentSelection(population, fitness_scores, tournament_size)
+// Турнірний відбір з розміром турніру tournament_size
+
+1. tournament ← SelectRandom(population, tournament_size)
+2. tournament_fitness ← GetFitness(tournament)
+3. winner ← ArgMax(tournament_fitness)
+4. ПОВЕРНУТИ tournament[winner]
+```
+
+```
+ФУНКЦІЯ: SinglePointCrossover(parent1, parent2)
+// Одноточкове схрещування
+
+1. N ← parent1.length
+2. crossover_point ← RandomInt(1, N-1)
+3. child1 ← parent1[0:crossover_point] + parent2[crossover_point:N]
+4. child2 ← parent2[0:crossover_point] + parent1[crossover_point:N]
+5. ПОВЕРНУТИ child1, child2
+```
+
+```
+ФУНКЦІЯ: BitFlipMutation(chromosome)
+// Побітова мутація
+
+1. N ← chromosome.length
+2. mutated ← chromosome.copy()
+3. mutation_position ← RandomInt(0, N-1)
+4. mutated[mutation_position] ← 1 - mutated[mutation_position]  // Інверсія біту
+5. ПОВЕРНУТИ mutated
+```
+
+Часова складність ЕМ-ГА: O(G × P × N × C), де G - кількість поколінь, P - розмір популяції, N - кількість терміналів, C - кількість споживачів. Основна складність припадає на обчислення функції пристосованості для кожної особини популяції [17].
+
+3.3.5 Алгоритм експорту результатів
+
+Система експортує результати оптимізації у формат CSV для подальшого аналізу в електронних таблицях [18]. Алгоритм забезпечує коректне кодування кирилиці та сумісність з Microsoft Excel:
+
+```
+АЛГОРИТМ: ExportResults(results, filename)
+ВХІД:
+    results - словник з результатами оптимізації
+    filename - шлях до вихідного файлу
+ВИХІД: CSV файл з результатами
+
+1. headers ← ["timestamp", "dataset", "method", "initial_cost", "final_cost",
+              "improvement_abs", "improvement_pct", "terminals_before",
+              "terminals_after", "execution_time", "iterations"]
+
+2. ВІДКРИТИ filename ДЛЯ ЗАПИСУ З КОДУВАННЯМ 'utf-8-sig':
+3.     // Директива для Excel з локалізованими налаштуваннями
+4.     ЗАПИСАТИ "sep=,\n"
+5.
+6.     // Заголовки
+7.     ЗАПИСАТИ ",".join(headers) + "\n"
+8.
+9.     // Дані
+10.    row ← []
+11.    ДЛЯ КОЖНОГО field В headers:
+12.        value ← results[field]
+13.        // Форматування чисел
+14.        ЯКЩО value є FLOAT ТОДІ
+15.            value ← Round(value, 2)
+16.        КІНЕЦЬ ЯКЩО
+17.        row.append(str(value))
+18.    КІНЕЦЬ ДЛЯ
+19.
+20.    ЗАПИСАТИ ",".join(row) + "\n"
+21. ЗАКРИТИ ФАЙЛ
+```
+
+Використання кодування UTF-8 with BOM (utf-8-sig) гарантує коректне відображення української мови в Microsoft Excel, а директива "sep=," вирішує проблему з регіональними налаштуваннями [19].
+
+3.3.6 Порівняльний аналіз складності алгоритмів
+
+Таблиця 3.2 містить порівняльний аналіз часової складності основних алгоритмів системи:
+
+┌────────────────────────────────┬─────────────────┬──────────────────┐
+│ Алгоритм                       │ Часова складність│ Просторова склад.│
+├────────────────────────────────┼─────────────────┼──────────────────┤
+│ Обчислення вартості            │ O(N × C)        │ O(1)             │
+│ Призначення споживачів         │ O(N × C)        │ O(C)             │
+│ МПО (одна ітерація)            │ O(N² × C)       │ O(N + C)         │
+│ МПО (загалом)                  │ O(I × N² × C)   │ O(N + C)         │
+│ ЕМ-ГА (одне покоління)         │ O(P × N × C)    │ O(P × N)         │
+│ ЕМ-ГА (загалом)                │ O(G × P × N × C)│ O(P × N)         │
+│ Експорт результатів            │ O(K)            │ O(K)             │
+└────────────────────────────────┴─────────────────┴──────────────────┘
+
+де I - кількість ітерацій МПО, G - кількість поколінь ГА, P - розмір популяції, K - кількість полів у результатах.
+
+Для типових параметрів (N=10, C=30, I=3, G=50, P=100) отримуємо:
+- МПО: O(3 × 100 × 30) = O(9000) операцій
+- ЕМ-ГА: O(50 × 100 × 10 × 30) = O(1,500,000) операцій
+
+Однак на практиці ЕМ-ГА часто знаходить кращі рішення завдяки глобальному пошуку, що компенсує більшу обчислювальну складність [20].
+
+Таким чином, реалізовані алгоритми забезпечують ефективну оптимізацію логістичних мереж з різними характеристиками. МПО підходить для малих мереж та випадків, коли потрібен детермінований результат, тоді як ЕМ-ГА ефективніший для великих мереж зі складною топологією.
+
+
+Список використаних джерел до розділу 3.3:
+
+[1] Ballou R. H. Business Logistics/Supply Chain Management. 5th ed. Prentice Hall, 2004. 789 p.
+
+[2] Chopra S., Meindl P. Supply Chain Management: Strategy, Planning, and Operation. 7th ed. Pearson, 2019. 528 p.
+
+[3] Daskin M. S. Network and Discrete Location: Models, Algorithms, and Applications. 2nd ed. John Wiley & Sons, 2013. 498 p.
+
+[4] Laporte G., Nickel S., Saldanha da Gama F. Location Science. 2nd ed. Springer, 2019. 703 p.
+
+[5] Cormen T. H., Leiserson C. E., Rivest R. L., Stein C. Introduction to Algorithms. 4th ed. MIT Press, 2022. 1312 p.
+
+[6] Deza M. M., Deza E. Encyclopedia of Distances. 4th ed. Springer, 2016. 756 p.
+
+[7] Harris C. R., Millman K. J., van der Walt S. J. et al. Array programming with NumPy. Nature. 2020. Vol. 585. P. 357-362. DOI: 10.1038/s41586-020-2649-2.
+
+[8] Preparata F. P., Shamos M. I. Computational Geometry: An Introduction. Springer, 1985. 398 p.
+
+[9] Bertsekas D. P. Nonlinear Programming. 3rd ed. Athena Scientific, 2016. 880 p.
+
+[10] Nocedal J., Wright S. J. Numerical Optimization. 2nd ed. Springer, 2006. 664 p.
+
+[11] Cooper L. Location-Allocation Problems. Operations Research. 1963. Vol. 11, No. 3. P. 331-343. DOI: 10.1287/opre.11.3.331.
+
+[12] Boyd S., Vandenberghe L. Convex Optimization. Cambridge University Press, 2004. 716 p.
+
+[13] Bazaraa M. S., Sherali H. D., Shetty C. M. Nonlinear Programming: Theory and Algorithms. 3rd ed. Wiley-Interscience, 2006. 872 p.
+
+[14] Goldberg D. E. Genetic Algorithms in Search, Optimization, and Machine Learning. Addison-Wesley Professional, 1989. 412 p.
+
+[15] Holland J. H. Adaptation in Natural and Artificial Systems. MIT Press, 1992. 211 p.
+
+[16] Mitchell M. An Introduction to Genetic Algorithms. MIT Press, 1998. 221 p.
+
+[17] Eiben A. E., Smith J. E. Introduction to Evolutionary Computing. 2nd ed. Springer, 2015. 287 p.
+
+[18] Shafranovich Y. Common Format and MIME Type for Comma-Separated Values (CSV) Files. RFC 4180, 2005. URL: https://www.rfc-editor.org/rfc/rfc4180 (дата звернення: 12.01.2025).
+
+[19] Unicode Consortium. The Unicode Standard, Version 15.0. Mountain View, CA: The Unicode Consortium, 2022. URL: https://www.unicode.org/versions/Unicode15.0.0/ (дата звернення: 12.01.2025).
+
+[20] Haupt R. L., Haupt S. E. Practical Genetic Algorithms. 3rd ed. Wiley, 2004. 272 p.
