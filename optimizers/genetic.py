@@ -28,7 +28,8 @@ class GeneticOptimizer(Optimizer):
         population_size: int = 50,
         generations: int = 100,
         mutation_rate: float = 0.1,
-        crossover_rate: float = 0.8
+        crossover_rate: float = 0.8,
+        early_stopping_generations: int = 30
     ):
         """
         Ініціалізація генетичного оптимізатора.
@@ -39,12 +40,14 @@ class GeneticOptimizer(Optimizer):
             generations: Кількість поколінь (за замовчуванням 100)
             mutation_rate: Ймовірність мутації (за замовчуванням 0.1)
             crossover_rate: Ймовірність кросоверу (за замовчуванням 0.8)
+            early_stopping_generations: Кількість поколінь без покращення для зупинки (за замовчуванням 30)
         """
         super().__init__(network)
         self.population_size = population_size
         self.generations = generations
         self.mutation_rate = mutation_rate
         self.crossover_rate = crossover_rate
+        self.early_stopping_generations = early_stopping_generations
         self.chromosome_length = len(network.terminals)
 
     def _initialize_population(self) -> List[List[int]]:
@@ -233,6 +236,10 @@ class GeneticOptimizer(Optimizer):
         best_chromosome = population[best_idx].copy()
         best_fitness = fitness_values[best_idx]
 
+        # Лічильник поколінь без покращення (для early stopping)
+        generations_without_improvement = 0
+        last_best_cost = float('inf')
+
         # Основний цикл еволюції
         for generation in range(self.generations):
             # Створюємо нову популяцію
@@ -271,21 +278,41 @@ class GeneticOptimizer(Optimizer):
             current_best_idx = max(range(len(population)), key=lambda i: fitness_values[i])
             current_best_fitness = fitness_values[current_best_idx]
 
+            # Обчислюємо поточні витрати для перевірки покращення
+            self._apply_chromosome(best_chromosome)
+            current_best_cost = self.network.calculate_costs()['total_cost']
+
             if current_best_fitness > best_fitness:
                 best_fitness = current_best_fitness
                 best_chromosome = population[current_best_idx].copy()
 
-            # Вивід прогресу кожні 10 поколінь
-            if verbose and (generation + 1) % 10 == 0:
-                # Обчислюємо поточні витрати
+                # Обчислюємо нові витрати
                 self._apply_chromosome(best_chromosome)
-                current_cost = self.network.calculate_costs()['total_cost']
-                improvement = ((self.initial_cost - current_cost) / self.initial_cost) * 100
+                current_best_cost = self.network.calculate_costs()['total_cost']
 
-                print(f"Покоління {generation + 1:3d}: "
-                      f"Пристосованість={best_fitness:.6f}, "
-                      f"Витрати={current_cost:,.2f}, "
-                      f"Покращення={improvement:.2f}%")
+                # Перевіряємо чи є реальне покращення вартості
+                if current_best_cost < last_best_cost:
+                    improvement = ((self.initial_cost - current_best_cost) / self.initial_cost) * 100
+
+                    if verbose:
+                        print(f"Покоління {generation + 1:3d}: "
+                              f"Витрати={current_best_cost:,.2f}, "
+                              f"Покращення={improvement:.2f}% "
+                              f"(△ {last_best_cost - current_best_cost:,.2f})")
+
+                    last_best_cost = current_best_cost
+                    generations_without_improvement = 0
+                else:
+                    generations_without_improvement += 1
+            else:
+                generations_without_improvement += 1
+
+            # Early stopping - зупинка при стагнації
+            if generations_without_improvement >= self.early_stopping_generations:
+                if verbose:
+                    print(f"\n⚠ Early stopping: {self.early_stopping_generations} поколінь без покращення")
+                    print(f"Зупинка на поколінні {generation + 1} з {self.generations}")
+                break
 
         # Застосовуємо найкраще рішення
         self._apply_chromosome(best_chromosome)
