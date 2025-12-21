@@ -238,7 +238,7 @@ class GeneticOptimizer(Optimizer):
 
         # Лічильник поколінь без покращення (для early stopping)
         generations_without_improvement = 0
-        last_best_cost = float('inf')
+        last_best_cost = self.initial_cost  # Початкова вартість для розрахунку дельти
 
         # Основний цикл еволюції
         for generation in range(self.generations):
