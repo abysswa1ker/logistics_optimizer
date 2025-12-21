@@ -178,9 +178,9 @@ def run_comparison(network: LogisticsNetwork, initial_costs: dict):
     start_time = time.time()
     optimizer_ga = GeneticOptimizer(
         network=network_ga,
-        population_size=50,
-        generations=100,
-        mutation_rate=0.1,
+        population_size=100,
+        generations=150,
+        mutation_rate=0.15,
         crossover_rate=0.8
     )
     ga_results = optimizer_ga.optimize(verbose=True)
@@ -410,9 +410,9 @@ def main():
         start_time = time.time()
         optimizer = GeneticOptimizer(
             network=network,
-            population_size=50,
-            generations=100,
-            mutation_rate=0.1,
+            population_size=100,
+            generations=150,
+            mutation_rate=0.15,
             crossover_rate=0.8
         )
 
@@ -426,9 +426,9 @@ def main():
 
         # Зберігаємо параметри та результати для експорту
         ga_parameters = {
-            'population_size': 50,
-            'generations': 100,
-            'mutation_rate': 0.1,
+            'population_size': 100,
+            'generations': 150,
+            'mutation_rate': 0.15,
             'crossover_rate': 0.8
         }
         ga_results = results
@@ -495,9 +495,9 @@ def main():
 
         ga_export_data = {
             'parameters': {
-                'population_size': 50,
-                'generations': 100,
-                'mutation_rate': 0.1,
+                'population_size': 100,
+                'generations': 150,
+                'mutation_rate': 0.15,
                 'crossover_rate': 0.8
             },
             'results': comparison_results['ga'],
